@@ -13,5 +13,8 @@ data/photos/
 # Screenshot artifacts (debug only, regenerated locally)
 data/rink-screenshot*.png
 
+# PWA simulation outputs (videos + per-device screenshots, regenerated)
+data/sim/
+
 # Local secrets (admin PINs etc.) — see .env.example
 .env
