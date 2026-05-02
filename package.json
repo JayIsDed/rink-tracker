@@ -1,0 +1,13 @@
+{
+  "name": "rink-tracker",
+  "version": "0.1.0",
+  "description": "AIO operations hub for the rink — issues, maintenance, work events, shift handoffs, and the upper-rink thickness heatmap.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch server/server.ts",
+    "start": "bun server/server.ts"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  }
+}

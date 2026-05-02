@@ -1,0 +1,27 @@
+services:
+  rink-tracker:
+    build: .
+    container_name: rink-tracker
+    restart: unless-stopped
+    networks:
+      - proxy-tier
+    ports:
+      # Direct LAN fallback
+      - "192.168.8.112:3738:3737"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PORT=3737
+      - TZ=America/New_York
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rink-tracker.rule=Host(`rink-tracker.pancake3d.com`)"
+      - "traefik.http.routers.rink-tracker.entrypoints=websecure"
+      - "traefik.http.routers.rink-tracker.tls.certresolver=cloudflare"
+      - "traefik.http.services.rink-tracker.loadbalancer.server.port=3737"
+
+networks:
+  proxy-tier:
+    external: true

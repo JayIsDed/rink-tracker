@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ice Tracker">
+  <rect width="512" height="512" rx="96" fill="#0a1320"/>
+  <!-- Stylized rink (rounded rect) -->
+  <rect x="64" y="160" width="384" height="192" rx="80" ry="80" fill="none" stroke="#3aa9ff" stroke-width="10"/>
+  <!-- Center line -->
+  <line x1="256" y1="170" x2="256" y2="342" stroke="#ff5e7a" stroke-width="6"/>
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="10" fill="#ff5e7a"/>
+  <!-- Faceoff dots -->
+  <circle cx="160" cy="220" r="9" fill="#ffd166"/>
+  <circle cx="160" cy="292" r="9" fill="#ffd166"/>
+  <circle cx="352" cy="220" r="9" fill="#ffd166"/>
+  <circle cx="352" cy="292" r="9" fill="#ffd166"/>
+  <!-- Wordmark dot -->
+  <circle cx="80" cy="80" r="22" fill="#3aa9ff"/>
+</svg>

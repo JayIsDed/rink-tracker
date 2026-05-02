@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1320">
+<title>Rink Tracker</title>
+<link rel="stylesheet" href="/style.css">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rink Tracker">
+</head>
+<body>
+<header class="shell-header">
+  <div class="shell-brand">
+    <span class="brand-dot"></span>
+    <span class="brand-name">Rink Tracker</span>
+  </div>
+  <div class="shell-controls">
+    <div class="rink-switch" role="tablist" aria-label="Rink">
+      <button class="rink-opt active" data-rink="U" type="button" role="tab" aria-selected="true">Upper</button>
+      <button class="rink-opt" data-rink="L" type="button" role="tab" aria-selected="false">Lower</button>
+    </div>
+    <button class="ident-chip" id="ident-chip" type="button" title="Who's logged in" aria-label="Identity">
+      <span class="ident-chip-icon" aria-hidden="true">●</span>
+      <span class="ident-chip-name" id="ident-chip-name">…</span>
+    </button>
+  </div>
+</header>
+
+<nav class="tab-nav" id="tab-nav" role="tablist" aria-label="Sections">
+  <a class="tab" href="#/"            data-tab="home"        role="tab"><span class="tab-label">Home</span></a>
+  <a class="tab" href="#/heatmap"     data-tab="heatmap"     role="tab"><span class="tab-label">Heatmap</span></a>
+  <a class="tab" href="#/issues"      data-tab="issues"      role="tab"><span class="tab-label">Issues</span></a>
+  <a class="tab" href="#/maintenance" data-tab="maintenance" role="tab"><span class="tab-label">Maint.</span></a>
+  <a class="tab" href="#/work"        data-tab="work"        role="tab"><span class="tab-label">Work</span></a>
+  <a class="tab" href="#/handoff"     data-tab="handoff"     role="tab"><span class="tab-label">Handoff</span></a>
+  <a class="tab" href="#/admin"       data-tab="admin"       role="tab"><span class="tab-label">Admin</span></a>
+</nav>
+
+<main class="shell-main" id="shell-main" role="main">
+  <div class="tab-loading" id="tab-loading">loading…</div>
+</main>
+
+<dialog id="identity-dialog" class="identity-dialog">
+  <form method="dialog" id="identity-form">
+    <header class="ident-header">
+      <h2 id="identity-title">Who's logging?</h2>
+      <p class="ident-sub">Pick your name so we know who logged what. Saved on this device — you'll only see this once.</p>
+    </header>
+    <div class="ident-list" id="identity-list"></div>
+    <div class="ident-add">
+      <input type="text" id="identity-new-name" placeholder="Or add yourself" maxlength="40" autocomplete="off">
+      <button type="button" class="btn-ghost" id="identity-add-btn">Add</button>
+    </div>
+    <div class="ident-status" id="identity-status"></div>
+    <footer class="ident-footer">
+      <button type="button" class="btn-link" id="identity-admin-link">Sign in as admin →</button>
+      <button type="button" class="btn-ghost" id="identity-cancel" hidden>Close</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="admin-dialog" class="admin-dialog">
+  <form method="dialog" id="admin-form">
+    <header class="admin-header">
+      <h2>Admin sign-in</h2>
+      <p class="admin-sub">Required for editing other people's entries, priorities, and dates.</p>
+    </header>
+    <label class="ctl admin-ctl">
+      <span>Name</span>
+      <select id="admin-name" required></select>
+    </label>
+    <label class="ctl admin-ctl">
+      <span>4-digit PIN</span>
+      <input type="password" id="admin-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" required>
+    </label>
+    <div class="admin-status" id="admin-status"></div>
+    <footer class="admin-footer">
+      <button type="button" class="btn-ghost" id="admin-cancel">Cancel</button>
+      <button type="submit" class="btn-primary" id="admin-submit">Sign in</button>
+    </footer>
+  </form>
+</dialog>
+
+<script type="module" src="/app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      console.log("[pwa] sw registered, scope:", reg.scope);
+    }).catch((err) => {
+      console.warn("[pwa] sw registration failed:", err);
+    });
+  });
+}
+</script>
+</body>
+</html>
