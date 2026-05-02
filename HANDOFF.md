@@ -1,6 +1,6 @@
 # Rink Tracker — Handoff
 
-_Last updated: 2026-05-02 12:38 EDT_
+_Last updated: 2026-05-02 14:15 EDT_
 
 AIO operations hub for the rink. Replaces ice-tracker (deprecation candidate)
 and absorbs the M1Encompass-friction manual logs. Built to make logging so
@@ -127,19 +127,33 @@ All AIO tables (except auth) carry a `rink_code` FK so Upper/Lower filter cleanl
 | Where | URL | Status |
 |---|---|---|
 | Local dev | `http://localhost:3737` | ✓ working |
-| Container LAN | `http://192.168.8.112:3738` | NOT deployed yet |
-| Production | `https://rink-tracker.pancake3d.com` | NOT deployed yet |
+| Container LAN | `http://192.168.8.112:3738` | ✓ live |
+| Production | `https://rink-tracker.pancake3d.com` | **✓ live (2026-05-02 14:15 EDT)** |
 | GitHub | `https://github.com/JayIsDed/rink-tracker` | private, pushed |
 
-ice-tracker still runs at `https://ice-tracker.pancake3d.com` and on dev port 3737. Both apps coexist until sunset.
+ice-tracker still runs at `https://ice-tracker.pancake3d.com` and on dev port 3737. Both apps coexist until sunset (step Z).
 
-### To deploy first time (when ready)
-1. Drop `.env` with `ADMIN_PINS=...` in `/opt/stacks/rink-tracker/`
-2. `mkdir /opt/stacks/rink-tracker/data && cp /opt/stacks/ice-tracker/data/ice_tracker.db /opt/stacks/rink-tracker/data/rink.db`
-3. Push code: `git -C ~/git/rink-tracker push deploy HEAD:main` (set up deploy remote first; mirror kobold/ice-tracker pattern)
-4. `ssh docker-services "cd /opt/stacks/rink-tracker && docker compose up -d --build"`
-5. Add Cloudflare DNS A record: `rink-tracker.pancake3d.com → 47.17.240.51`, proxied=false (or omit if wildcard)
-6. Verify: `curl -I https://rink-tracker.pancake3d.com/api/health`
+### Prod stack layout (LXC 112)
+```
+/opt/stacks/rink-tracker/
+├── docker-compose.yml       # stack-root compose, build: ./src, volumes: ./data
+├── .env                     # ADMIN_PINS=... (chmod 600, gitignored, NOT in repo)
+├── data/                    # rink.db (cloned from ice_tracker.db) + photos/YYYY-MM-DD/
+└── src/                     # git deploy target (main branch checked out via updateInstead)
+```
+- Compose at stack root references `build: ./src` and `volumes: - ./data:/app/data`
+- Data dir was seeded with the live ice-tracker DB clone (2,216 measurements)
+- Sharp 0.34.5 builds cleanly in `oven/bun:1.3-alpine` with `bun install --frozen-lockfile --production`
+
+### Redeploy flow (next time)
+```bash
+git -C ~/git/rink-tracker push deploy HEAD:main
+ssh docker-services "cd /opt/stacks/rink-tracker && docker compose up -d --build"
+```
+The deploy remote is configured locally as `deploy` → `ssh://docker-services/opt/stacks/rink-tracker/src`.
+
+### Cloudflare DNS
+A record: `rink-tracker.pancake3d.com → 47.17.240.51`, proxied=false, TTL 300 (created via CF API on deploy). Mirrors ice-tracker's pattern. Wildcard cert from traefik covers it — no new ACME challenge.
 
 **CRITICAL traefik gotcha (from ice-tracker handoff):** when redeploying the traefik stack itself, always use both compose files: `docker compose -f docker-compose.yml -f compose.prod.yml up -d`. The overlay publishes ports 80/443/8883. Plain `up -d` strips port publishing and takes ALL pancake3d.com domains offline.
 
