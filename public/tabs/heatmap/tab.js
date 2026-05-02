@@ -168,22 +168,38 @@ export async function init(shellCtx) {
   };
 
   // ───── canvas + render ──────────────────────────────────────────────
-  function resizeCanvas() {
+  // Cached so render() doesn't recompute layout every frame. Updated only when
+  // the wrap's content-box actually changes (ResizeObserver below).
+  let cachedSize = { cssW: 0, cssH: 0 };
+
+  function computeCanvasSize() {
     const wrap = canvas.parentElement;
     const dpr = window.devicePixelRatio || 1;
     const aspect = RINK_W / RINK_H;
     const padding = 24;
-    const wAvail = wrap.clientWidth - padding * 2;
-    const hAvail = wrap.clientHeight - padding * 2;
+    const wAvail = Math.max(0, wrap.clientWidth - padding * 2);
+    const hAvail = Math.max(0, wrap.clientHeight - padding * 2);
     let cssW, cssH;
     if (wAvail / hAvail > aspect) { cssH = hAvail; cssW = cssH * aspect; }
     else { cssW = wAvail; cssH = cssW / aspect; }
+    // Round to whole px — fractional canvas sizes cause AA shimmer between renders.
+    cssW = Math.floor(cssW);
+    cssH = Math.floor(cssH);
+    return { cssW, cssH, dpr };
+  }
+
+  function applyCanvasSize(force = false) {
+    const { cssW, cssH, dpr } = computeCanvasSize();
+    if (!force && cssW === cachedSize.cssW && cssH === cachedSize.cssH) {
+      return cachedSize;
+    }
+    cachedSize = { cssW, cssH };
     canvas.style.width  = cssW + "px";
     canvas.style.height = cssH + "px";
     canvas.width  = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { cssW, cssH };
+    return cachedSize;
   }
 
   function getValueAt(pt) {
@@ -270,7 +286,8 @@ export async function init(shellCtx) {
 
   function render() {
     if (state.points.length === 0) return; // empty state already shown
-    const { cssW, cssH } = resizeCanvas();
+    if (cachedSize.cssW === 0) applyCanvasSize(true); // first paint
+    const { cssW, cssH } = cachedSize;
     const scale = cssW / RINK_W;
     cx.clearRect(0, 0, cssW, cssH);
 
@@ -450,10 +467,41 @@ export async function init(shellCtx) {
     }
     return null;
   }
+  // Body scroll lock for the mobile bottom-sheet — iOS-safe (position:fixed pattern
+   // restores scroll position on release; document.body.style.overflow:hidden alone
+   // doesn't stop touch scroll on iOS Safari).
+  let savedScrollY = 0;
+  function lockBodyScroll() {
+    if (document.body.dataset.scrollLocked === "1") return;
+    savedScrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${savedScrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    document.body.dataset.scrollLocked = "1";
+  }
+  function unlockBodyScroll() {
+    if (document.body.dataset.scrollLocked !== "1") return;
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    delete document.body.dataset.scrollLocked;
+    window.scrollTo(0, savedScrollY);
+  }
+
   function setSheetExpanded(expanded) {
     const sheet = $(".hm-side-pane");
+    const backdrop = $("#sheet-backdrop");
     if (!sheet) return;
     sheet.classList.toggle("expanded", expanded);
+    if (backdrop) backdrop.classList.toggle("active", expanded);
+    if (isMobile()) {
+      if (expanded) lockBodyScroll();
+      else unlockBodyScroll();
+    }
     updatePeekLabel();
   }
   function updatePeekLabel() {
@@ -943,7 +991,18 @@ export async function init(shellCtx) {
   }
 
   // Event handlers (kept as named refs so destroy() can detach)
-  const onResize = () => render();
+  // resizeRO observes the canvas wrap and only triggers on actual size change.
+  // This prevents the rink from re-painting (and visibly shimmering) on every
+  // mousemove / iOS URL-bar collapse event.
+  const resizeRO = new ResizeObserver(() => {
+    const { cssW, cssH } = cachedSize;
+    const next = computeCanvasSize();
+    if (next.cssW !== cssW || next.cssH !== cssH) {
+      applyCanvasSize();
+      render();
+    }
+  });
+  resizeRO.observe(canvas.parentElement);
   const onOnline = () => drainAndRefresh();
   const onVisibility = () => { if (document.visibilityState === "visible") drainAndRefresh(); };
   const onSWMessage = (e) => { if (e.data?.type === "sw:drain-outbox") drainAndRefresh(); };
@@ -971,9 +1030,10 @@ export async function init(shellCtx) {
     }
   });
   $("#sheet-peek").addEventListener("click", () => {
-    $(".hm-side-pane").classList.toggle("expanded");
-    updatePeekLabel();
+    const sheet = $(".hm-side-pane");
+    setSheetExpanded(!sheet.classList.contains("expanded"));
   });
+  $("#sheet-backdrop")?.addEventListener("click", () => setSheetExpanded(false));
 
   // Date pickers
   $("#date-picker").addEventListener("change", async () => {
@@ -1025,7 +1085,6 @@ export async function init(shellCtx) {
   $("#entry-date").addEventListener("change", e => loadEntryFor(e.target.value));
 
   // Window-level listeners
-  window.addEventListener("resize", onResize);
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisibility);
   if ("serviceWorker" in navigator) {
@@ -1040,7 +1099,8 @@ export async function init(shellCtx) {
 
   // Teardown — called by router when user navigates away
   return () => {
-    window.removeEventListener("resize", onResize);
+    resizeRO.disconnect();
+    unlockBodyScroll(); // release if user navigates away with sheet open
     window.removeEventListener("online", onOnline);
     document.removeEventListener("visibilitychange", onVisibility);
     if ("serviceWorker" in navigator) {
