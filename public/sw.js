@@ -25,6 +25,7 @@ const SHELL_URLS = [
   "/tabs/heatmap/index.html",
   "/tabs/heatmap/tab.js",
   "/tabs/issues/index.html",
+  "/tabs/issues/tab.js",
   "/tabs/maintenance/index.html",
   "/tabs/work/index.html",
   "/tabs/handoff/index.html",

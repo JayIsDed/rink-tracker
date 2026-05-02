@@ -17,6 +17,12 @@ import {
   handleGetConcrete, handleGetStats, handleGetAnomalies,
   handleGetWeatherAll, handleGetWeatherByDate, handlePostMeasurements,
 } from "./routes/heatmap";
+import {
+  handleListIssues, handleGetIssue, handleListIssuesByPoint,
+  handleCreateIssue, handlePatchIssue,
+  handleAddIssuePhotos, handleDeleteIssuePhoto,
+  handleIssueComment, handleServePhoto,
+} from "./routes/issues";
 
 const PORT = Number(process.env.PORT ?? 3737);
 const ADMIN_PINS = process.env.ADMIN_PINS ?? "";
@@ -94,6 +100,35 @@ const server = Bun.serve({
     if (p === "/api/weather") return handleGetWeatherAll();
     if (p.startsWith("/api/weather/")) return handleGetWeatherByDate(p.split("/").pop() ?? "");
     if (p.startsWith("/api/timeseries/")) return handleGetTimeseries(url, p.split("/").pop() ?? "");
+
+    // Issues + photos (step 3)
+    if (req.method === "POST" && p === "/api/issues") return handleCreateIssue(req);
+    if (p === "/api/issues") return handleListIssues(url);
+    if (p === "/api/issues/by-point") return handleListIssuesByPoint(url);
+    {
+      // Per-issue subpaths: /api/issues/:id, /api/issues/:id/photos, /api/issues/:id/photos/:photoId, /api/issues/:id/comment
+      const m = /^\/api\/issues\/(\d+)(?:\/(photos|comment))?(?:\/(\d+))?$/.exec(p);
+      if (m) {
+        const id = m[1];
+        const sub = m[2];
+        const subId = m[3];
+        if (!sub) {
+          if (req.method === "PATCH") return handlePatchIssue(req, id);
+          if (req.method === "GET")   return handleGetIssue(id);
+        }
+        if (sub === "photos") {
+          if (req.method === "POST" && !subId)   return handleAddIssuePhotos(req, id);
+          if (req.method === "DELETE" && subId)  return handleDeleteIssuePhoto(req, id, subId);
+        }
+        if (sub === "comment" && req.method === "POST" && !subId) {
+          return handleIssueComment(req, id);
+        }
+      }
+    }
+
+    // Photo serving — thumbs first so the prefix match is unambiguous.
+    if (p.startsWith("/api/photos/thumbs/")) return handleServePhoto(p.slice("/api/photos/thumbs/".length), "thumb");
+    if (p.startsWith("/api/photos/"))         return handleServePhoto(p.slice("/api/photos/".length), "full");
 
     // Health
     if (p === "/api/health") {

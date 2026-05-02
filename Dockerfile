@@ -3,11 +3,13 @@ FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-COPY package.json tsconfig.json ./
+COPY package.json bun.lock tsconfig.json ./
+RUN bun install --frozen-lockfile --production
+
 COPY server ./server
 COPY public ./public
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/data/photos /app/data/photos/thumbs
 
 ENV PORT=3737
 ENV NODE_ENV=production

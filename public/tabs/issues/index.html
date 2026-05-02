@@ -1,5 +1,105 @@
-<div class="tab-stub">
-  <h1>Issues</h1>
-  <p>Photo-first log for "oh shit I found this" moments — tap a zone on the rink, snap a pic, optional note, save. Pinned to the rink schematic. Filter by status / severity / rink.</p>
-  <span class="stub-tag">step 3 — coming soon</span>
+<div class="issues-tab" data-tab-root>
+  <div class="iss-controls">
+    <div class="iss-filter-strip" role="tablist" aria-label="Status filter">
+      <button class="iss-filter active" data-status="open"     type="button" role="tab" aria-selected="true">Open</button>
+      <button class="iss-filter"        data-status="resolved" type="button" role="tab" aria-selected="false">Resolved</button>
+      <button class="iss-filter"        data-status="all"      type="button" role="tab" aria-selected="false">All</button>
+    </div>
+    <span class="iss-counter" id="iss-counter" aria-live="polite"></span>
+  </div>
+
+  <div class="iss-list" id="iss-list" aria-live="polite"></div>
+  <div class="iss-empty" id="iss-empty" hidden>
+    <div class="tab-stub">
+      <h1>No issues yet</h1>
+      <p>Tap the <strong>+</strong> below to log the first one. Photo, location, severity — done in 30 seconds.</p>
+    </div>
+  </div>
+
+  <button class="iss-fab" id="iss-fab" type="button" aria-label="New issue">
+    <span class="iss-fab-plus" aria-hidden="true">+</span>
+    <span class="iss-fab-label">New issue</span>
+  </button>
+
+  <!-- New issue sheet -->
+  <dialog id="iss-new-dialog" class="iss-new-dialog">
+    <form method="dialog" id="iss-new-form">
+      <header class="iss-new-header">
+        <div class="iss-new-title">
+          <span>New issue</span>
+          <small id="iss-new-rink-hint">on this rink</small>
+        </div>
+        <div class="iss-new-actions">
+          <button type="button" class="btn-ghost" id="iss-new-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="iss-new-save">Save</button>
+        </div>
+      </header>
+
+      <div class="iss-new-body">
+        <label class="ctl iss-ctl">
+          <span>Title</span>
+          <input type="text" id="iss-new-title-inp" maxlength="200" placeholder="What's the issue?" required autocomplete="off">
+        </label>
+
+        <div class="iss-ctl">
+          <span>Severity</span>
+          <div class="iss-sev-strip" role="radiogroup">
+            <button type="button" class="iss-sev"            data-sev="low"  role="radio" aria-checked="false">Low</button>
+            <button type="button" class="iss-sev iss-sev-med active" data-sev="med"  role="radio" aria-checked="true">Med</button>
+            <button type="button" class="iss-sev iss-sev-high"       data-sev="high" role="radio" aria-checked="false">High</button>
+          </div>
+        </div>
+
+        <div class="iss-ctl">
+          <span>Photos</span>
+          <div class="iss-photo-row">
+            <label class="iss-photo-add" id="iss-photo-add-label" tabindex="0">
+              <span class="iss-photo-add-icon" aria-hidden="true">📷</span>
+              <span>Add photo</span>
+              <input type="file" id="iss-photo-input" accept="image/*" capture="environment" multiple hidden>
+            </label>
+            <div class="iss-photo-previews" id="iss-photo-previews"></div>
+          </div>
+        </div>
+
+        <div class="iss-ctl">
+          <span>Pin location <em class="iss-ctl-aux">(optional)</em></span>
+          <button type="button" class="iss-pin-toggle" id="iss-pin-toggle">
+            <span id="iss-pin-toggle-label">Tap a spot on the rink</span>
+          </button>
+          <div class="iss-pin-pane" id="iss-pin-pane" hidden>
+            <div class="iss-pin-canvas-wrap">
+              <canvas id="iss-pin-canvas"></canvas>
+            </div>
+            <div class="iss-pin-status" id="iss-pin-status">tap the rink to drop a pin · long-press a numbered point to snap</div>
+            <button type="button" class="btn-ghost iss-pin-clear" id="iss-pin-clear" hidden>Clear pin</button>
+          </div>
+        </div>
+
+        <label class="ctl iss-ctl">
+          <span>Notes <em class="iss-ctl-aux">(optional)</em></span>
+          <textarea id="iss-new-body-inp" maxlength="4000" rows="3" placeholder="Anything else worth noting?"></textarea>
+        </label>
+
+        <div class="iss-new-status" id="iss-new-status"></div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Issue detail dialog -->
+  <dialog id="iss-detail-dialog" class="iss-detail-dialog">
+    <form method="dialog" id="iss-detail-form">
+      <header class="iss-detail-header">
+        <button type="button" class="btn-ghost iss-back" id="iss-detail-close" aria-label="Back">←</button>
+        <div class="iss-detail-title-wrap">
+          <h2 class="iss-detail-title" id="iss-detail-title">…</h2>
+          <div class="iss-detail-meta" id="iss-detail-meta"></div>
+        </div>
+      </header>
+
+      <div class="iss-detail-body" id="iss-detail-body">
+        <div class="iss-loading">loading…</div>
+      </div>
+    </form>
+  </dialog>
 </div>

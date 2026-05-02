@@ -6,11 +6,17 @@
 // measurements, weather, idempotency_keys) are picked up as-is.
 
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 export const ROOT = join(import.meta.dir, "..");
-export const DB_PATH = join(ROOT, "data", "rink.db");
+export const DATA = join(ROOT, "data");
+export const DB_PATH = join(DATA, "rink.db");
 export const PUBLIC = join(ROOT, "public");
+export const PHOTOS_DIR = join(DATA, "photos");
+export const PHOTOS_THUMBS_DIR = join(PHOTOS_DIR, "thumbs");
+
+mkdirSync(PHOTOS_THUMBS_DIR, { recursive: true });
 
 export const db = new Database(DB_PATH);
 db.exec("PRAGMA journal_mode = WAL;");
@@ -92,6 +98,68 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_audit_at   ON audit_log(at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id, at DESC);
+`);
+
+// ──────────────────────────────────────────────────────────────────────
+// AIO schema — issues + photos + revisions (step 3)
+// ──────────────────────────────────────────────────────────────────────
+// Location is optional and can be either a snap-to point_nbr (matches the
+// heatmap's 35-point grid) OR free-form normalized coords (x_norm, y_norm
+// in [0,1]) for "tap anywhere on the schematic" pins. point_nbr wins when
+// both are set. NULL location = "no specific spot" (e.g. zamboni issue).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS issues (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    rink_code    TEXT NOT NULL,
+    point_nbr    INTEGER,
+    x_norm       REAL,
+    y_norm       REAL,
+    severity     TEXT NOT NULL CHECK(severity IN ('low','med','high')) DEFAULT 'med',
+    status       TEXT NOT NULL CHECK(status IN ('open','in_progress','resolved')) DEFAULT 'open',
+    title        TEXT NOT NULL,
+    body         TEXT,
+    created_by   INTEGER,
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    resolved_at  INTEGER,
+    resolved_by  INTEGER,
+    FOREIGN KEY (created_by)  REFERENCES users(id),
+    FOREIGN KEY (resolved_by) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_issues_rink_status ON issues(rink_code, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_issues_point       ON issues(rink_code, point_nbr) WHERE point_nbr IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_issues_created     ON issues(created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS issue_revisions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_id     INTEGER NOT NULL,
+    user_id      INTEGER,
+    action       TEXT NOT NULL,
+    field        TEXT,
+    old_value    TEXT,
+    new_value    TEXT,
+    comment      TEXT,
+    at           INTEGER NOT NULL,
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)  REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_issue_rev_issue ON issue_revisions(issue_id, at DESC);
+
+  CREATE TABLE IF NOT EXISTS issue_photos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_id       INTEGER NOT NULL,
+    filename       TEXT NOT NULL,
+    thumb_filename TEXT NOT NULL,
+    width          INTEGER,
+    height         INTEGER,
+    size_bytes     INTEGER,
+    mime_type      TEXT,
+    uploaded_by    INTEGER,
+    uploaded_at    INTEGER NOT NULL,
+    FOREIGN KEY (issue_id)    REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_issue_photos_issue ON issue_photos(issue_id, uploaded_at);
 `);
 
 // Idempotency dedupe — used by any POST that wants offline-retry safety.
