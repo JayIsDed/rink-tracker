@@ -10,5 +10,8 @@ data/*.db-wal
 # Photos — stored in volume mount
 data/photos/
 
+# Screenshot artifacts (debug only, regenerated locally)
+data/rink-screenshot*.png
+
 # Local secrets (admin PINs etc.) — see .env.example
 .env

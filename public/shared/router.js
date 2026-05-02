@@ -13,7 +13,7 @@ const DEFAULT_TAB = "home";
 const ROUTES = new Map(TABS.map((t) => [t, `/tabs/${t}/`]));
 
 let currentTab = null;
-let currentInit = null;
+let currentTeardown = null;
 
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, "");
@@ -25,6 +25,11 @@ function parseHash() {
 async function loadTab(tab, ctx) {
   const main = document.getElementById("shell-main");
   if (!main) return;
+  // Tear down the previous tab so its window listeners / timers go away.
+  if (currentTeardown) {
+    try { currentTeardown(); } catch (err) { console.warn(`[router] teardown error:`, err); }
+    currentTeardown = null;
+  }
   main.innerHTML = `<div class="tab-loading">loading…</div>`;
   // Highlight nav
   for (const el of document.querySelectorAll(".tab")) {
@@ -42,14 +47,14 @@ async function loadTab(tab, ctx) {
   main.innerHTML = html;
 
   // Try to dynamically import tab.js for that tab. Optional — tabs without JS
-  // logic are fine.
+  // logic are fine. init() may return a teardown function (sync) called on tab
+  // unmount, or void if there's nothing to clean up.
   try {
     const mod = await import(`${ROUTES.get(tab)}tab.js`).catch(() => null);
     if (mod?.init) {
-      currentInit = mod.init(ctx);
-      if (currentInit && typeof currentInit.then === "function") await currentInit;
-    } else {
-      currentInit = null;
+      const result = await Promise.resolve(mod.init(ctx));
+      if (typeof result === "function") currentTeardown = result;
+      else if (result && typeof result.destroy === "function") currentTeardown = result.destroy;
     }
   } catch (err) {
     console.warn(`[router] tab.js for ${tab} failed:`, err);

@@ -12,6 +12,11 @@ import {
   handleAdminLogin, handleAdminLogout, handleWhoami,
   handleListUsers, handleAddUser,
 } from "./auth";
+import {
+  handleGetPoints, handleGetDates, handleGetMeasurements, handleGetTimeseries,
+  handleGetConcrete, handleGetStats, handleGetAnomalies,
+  handleGetWeatherAll, handleGetWeatherByDate, handlePostMeasurements,
+} from "./routes/heatmap";
 
 const PORT = Number(process.env.PORT ?? 3737);
 const ADMIN_PINS = process.env.ADMIN_PINS ?? "";
@@ -77,6 +82,18 @@ const server = Bun.serve({
     if (p === "/api/auth/whoami") return handleWhoami(req);
     if (req.method === "POST" && p === "/api/users") return handleAddUser(req);
     if (p === "/api/users") return handleListUsers();
+
+    // Heatmap (ported from ice-tracker; rink-aware via ?rink=U|L)
+    if (req.method === "POST" && p === "/api/measurements") return handlePostMeasurements(req);
+    if (p === "/api/measurements") return handleGetMeasurements(url);
+    if (p === "/api/points") return handleGetPoints(url);
+    if (p === "/api/dates")  return handleGetDates(url);
+    if (p === "/api/concrete-profile") return handleGetConcrete(url);
+    if (p === "/api/stats") return handleGetStats(url);
+    if (p === "/api/anomalies") return handleGetAnomalies(url);
+    if (p === "/api/weather") return handleGetWeatherAll();
+    if (p.startsWith("/api/weather/")) return handleGetWeatherByDate(p.split("/").pop() ?? "");
+    if (p.startsWith("/api/timeseries/")) return handleGetTimeseries(url, p.split("/").pop() ?? "");
 
     // Health
     if (p === "/api/health") {

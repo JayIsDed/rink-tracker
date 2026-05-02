@@ -1,6 +1,86 @@
-<div class="tab-stub">
-  <h1>Heatmap — Upper Rink</h1>
-  <p>Thickness/temperature/concrete-danger/delta/plan/anomaly modes ported from ice-tracker. 35-point IDW interpolation over the rink schematic, weather context, entry form with offline outbox.</p>
-  <p>Lower rink (sand) has no thickness data — this tab will show an empty state when Lower is selected.</p>
-  <span class="stub-tag">step B — port from ice-tracker</span>
+<div class="heatmap-tab" data-tab-root>
+  <div class="hm-controls">
+    <select id="date-picker" class="hm-date-select" aria-label="Date"></select>
+
+    <div class="hm-mode-strip" id="mode-group" role="tablist">
+      <button class="hm-mode active" data-mode="depth"    type="button" role="tab">Depth</button>
+      <button class="hm-mode"        data-mode="temp"     type="button" role="tab">Temp</button>
+      <button class="hm-mode"        data-mode="concrete" type="button" role="tab">Concrete</button>
+      <button class="hm-mode"        data-mode="delta"    type="button" role="tab">Delta</button>
+      <button class="hm-mode"        data-mode="plan"     type="button" role="tab">Plan</button>
+      <button class="hm-mode"        data-mode="anomaly"  type="button" role="tab">Anomaly</button>
+    </div>
+
+    <button class="hm-mesh-toggle active" id="mesh-toggle" type="button" aria-pressed="true" title="Toggle confidence mesh">
+      <span class="hm-mesh-icon" aria-hidden="true"></span>
+      <span>Mesh</span>
+    </button>
+
+    <span class="hm-queued-badge" id="queued-badge" hidden title="Entries waiting to sync"></span>
+
+    <button class="hm-entry-btn" id="entry-btn" type="button" title="Enter new measurements">
+      <span class="hm-entry-plus">+</span><span>Entry</span>
+    </button>
+  </div>
+
+  <div class="hm-context" id="context-row" hidden>
+    <label class="ctl delta-ctl" hidden>
+      <span>vs.</span>
+      <select id="delta-picker"></select>
+    </label>
+    <label class="ctl plan-ctl" hidden>
+      <span>Cut depth</span>
+      <input type="range" id="plan-cut" min="0" max="1.0" step="0.05" value="0.25">
+      <span class="plan-value" id="plan-cut-value">0.25"</span>
+    </label>
+  </div>
+
+  <div class="hm-empty" id="hm-empty" hidden>
+    <div class="tab-stub">
+      <h1>Lower rink</h1>
+      <p>The lower rink is sand-floored — no thickness measurements taken. The heatmap only applies to the upper rink.</p>
+      <span class="stub-tag">switch to Upper to view</span>
+    </div>
+  </div>
+
+  <div class="hm-main" id="hm-main">
+    <section class="hm-canvas-pane">
+      <div class="hm-canvas-wrap">
+        <canvas id="rink"></canvas>
+        <div class="hm-legend" id="legend"></div>
+      </div>
+      <div class="hm-status" id="status"></div>
+    </section>
+
+    <aside class="hm-side-pane" id="side">
+      <div class="hm-sheet-peek" id="sheet-peek">
+        <span id="sheet-peek-label">tap a point on the rink ▴</span>
+      </div>
+      <div class="hm-sheet-content" id="sheet-content">
+        <div class="hm-empty-tap">tap any point on the rink for its history</div>
+      </div>
+    </aside>
+  </div>
+
+  <dialog id="entry-dialog" class="hm-entry-dialog">
+    <form method="dialog" id="entry-form">
+      <header class="hm-entry-header">
+        <div class="hm-entry-title">
+          <span>Enter Readings</span>
+          <small id="entry-subtitle"></small>
+        </div>
+        <div class="hm-entry-controls">
+          <label class="ctl">
+            <span>Date</span>
+            <input type="date" id="entry-date" required>
+          </label>
+          <button type="button" class="btn-ghost" id="entry-fill-now">Fill from latest</button>
+          <button type="submit" class="btn-primary" id="entry-save">Save</button>
+          <button type="button" class="btn-ghost" id="entry-cancel">Cancel</button>
+        </div>
+      </header>
+      <div class="hm-entry-status" id="entry-status"></div>
+      <div class="hm-entry-grid" id="entry-grid"></div>
+    </form>
+  </dialog>
 </div>

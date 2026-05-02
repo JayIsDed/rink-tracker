@@ -94,6 +94,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id, at DESC);
 `);
 
+// Idempotency dedupe — used by any POST that wants offline-retry safety.
+// See public/shared/outbox.js for the client side.
+export const qIdemGet = db.query<{ response: string }, [string]>(
+  `SELECT response FROM idempotency_keys WHERE key = $1`
+);
+export const qIdemPut = db.query(
+  `INSERT OR IGNORE INTO idempotency_keys (key, response, created_at) VALUES ($key, $response, $now)`
+);
+
 // SW cache version — git short-sha if available, boot timestamp otherwise.
 export const SW_VERSION = (() => {
   try {
