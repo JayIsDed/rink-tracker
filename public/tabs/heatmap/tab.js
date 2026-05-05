@@ -1005,7 +1005,13 @@ export async function init(shellCtx) {
       flagBox.hidden = true;
     }
 
-    $("#entry-progress").textContent = `${entryEffectiveCount()}/35`;
+    {
+      const done = entryEffectiveCount();
+      const prog = $("#entry-progress");
+      const v = prog.querySelector(".v");
+      if (v) v.textContent = `${done}/35`;
+      prog.classList.toggle("complete", done === 35);
+    }
   }
 
   function commitCurrent({ silent = false } = {}) {
@@ -1380,7 +1386,13 @@ export async function init(shellCtx) {
     } else {
       flagBox.hidden = true;
     }
-    $("#entry-progress").textContent = `${entryEffectiveCount()}/35`;
+    {
+      const done = entryEffectiveCount();
+      const prog = $("#entry-progress");
+      const v = prog.querySelector(".v");
+      if (v) v.textContent = `${done}/35`;
+      prog.classList.toggle("complete", done === 35);
+    }
   }
 
   async function updateQueuedBadge() {

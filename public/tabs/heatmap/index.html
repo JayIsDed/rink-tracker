@@ -117,9 +117,15 @@
         <strong id="entry-mode-date"></strong>
         <span class="hm-entry-mode-tag" id="entry-mode-tag"></span>
       </div>
-      <div class="hm-entry-progress" id="entry-progress">0/35</div>
-      <button type="button" class="btn-ghost" id="entry-order-toggle" title="Toggle walking order">↻ Order</button>
-      <button type="button" class="btn-primary" id="entry-finish">Save Session</button>
+      <div class="hm-entry-progress" id="entry-progress" aria-label="Progress">
+        <span class="k">Done</span><span class="v">0/35</span>
+      </div>
+      <button type="button" class="btn-ghost" id="entry-order-toggle" title="Toggle walking order" aria-label="Toggle walking order">
+        <span aria-hidden="true">↻</span><span class="label">Order</span>
+      </button>
+      <button type="button" class="btn-primary" id="entry-finish" aria-label="Save session">
+        <span class="label-long">Save Session</span><span class="label-short" aria-hidden="true">Save</span>
+      </button>
     </header>
 
     <div class="hm-entry-stage">

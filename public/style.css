@@ -708,9 +708,19 @@ a { color: inherit; text-decoration: none; }
 }
 .hm-start-header {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
   margin-bottom: 2px;
 }
-.hm-start-header h3 { margin: 0; font-size: 16px; }
+.hm-start-header h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: 0.01em; }
+/* Compact icon-only close — overrides full-pill .btn-ghost in this context. */
+.hm-start-header .btn-ghost {
+  flex: 0 0 auto; width: 36px; min-width: 36px; min-height: 36px;
+  padding: 0; border-radius: 10px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--muted); font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.hm-start-header .btn-ghost:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .hm-start-dialog .ctl {
   display: flex; flex-direction: column; gap: 6px;
   font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
@@ -754,26 +764,122 @@ a { color: inherit; text-decoration: none; }
 }
 .hm-entry-mode[hidden] { display: none; }
 .hm-entry-fields[hidden], .hm-entry-flag[hidden] { display: none; }
+
+/* Header bar — glassmorphism to match shell-header + floating dock vocab. */
 .hm-entry-bar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px;
-  background: var(--surface); border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  padding-left:  calc(12px + var(--sa-left));
+  padding-right: calc(12px + var(--sa-right));
+  background: rgba(17, 29, 46, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-.hm-entry-bar .btn-ghost,
-.hm-entry-bar .btn-primary { min-height: 40px; padding: 0 14px; border-radius: 8px; font: inherit; cursor: pointer; }
-.hm-entry-meta { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.hm-entry-meta strong { font-size: 14px; font-variant-numeric: tabular-nums; }
-.hm-entry-mode-tag {
-  font-size: 10px; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.06em;
+/* Compact icon-only ✕ (overrides .btn-ghost full-pill in this context). */
+.hm-entry-bar #entry-exit {
+  flex: 0 0 auto; min-height: 40px; min-width: 40px;
+  width: 40px; padding: 0; border-radius: 10px;
+  font-size: 16px; line-height: 1; color: var(--muted);
+  background: transparent; border: 1px solid transparent;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.hm-entry-mode-tag.editing { color: var(--warn); }
-.hm-entry-progress {
+.hm-entry-bar #entry-exit:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.hm-entry-bar #entry-order-toggle {
+  flex: 0 0 auto; min-height: 40px; padding: 0 12px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.hm-entry-bar #entry-order-toggle:hover { background: var(--surface-3); color: var(--text); }
+/* Save Session — primary action, but compact at this scale. */
+.hm-entry-bar .btn-primary {
+  flex: 0 0 auto; min-height: 40px; padding: 0 14px;
+  border-radius: 10px; font-size: 13px;
+  box-shadow: 0 0 0 1px var(--accent-glow);
+}
+.hm-entry-bar .btn-primary .label-short { display: none; }
+
+/* Date + tag stack — date locked to one line, tag is a true pill. */
+.hm-entry-meta {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 3px; flex: 1; min-width: 0;
+}
+.hm-entry-meta strong {
+  font-size: 13px; font-weight: 700;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.hm-entry-mode-tag {
+  display: inline-flex; align-items: center;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(78, 197, 255, 0.14);
+  color: var(--accent);
+  border: 1px solid rgba(78, 197, 255, 0.35);
+  white-space: nowrap;
+}
+.hm-entry-mode-tag.editing {
+  background: rgba(255, 177, 78, 0.16);
+  color: var(--warn);
+  border-color: rgba(255, 177, 78, 0.4);
+}
+
+/* Progress chip — match .hm-chip key+value pattern. */
+.hm-entry-progress {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: baseline; gap: 6px;
   background: var(--surface-2); border: 1px solid var(--border);
-  padding: 6px 12px; border-radius: 999px;
-  font-size: 13px; font-weight: 600;
+  padding: 5px 10px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hm-entry-progress .k {
+  color: var(--muted); font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.hm-entry-progress .v {
+  color: var(--text); font-size: 13px; font-weight: 700;
+}
+.hm-entry-progress.complete { border-color: rgba(78, 255, 154, 0.4); }
+.hm-entry-progress.complete .v { color: var(--good); }
+
+/* Mobile (S24 Ultra and below): hide order-toggle label, compact spacing,
+ * and let the meta block dominate so the date never ellipsis-truncates. */
+@media (max-width: 480px) {
+  .hm-entry-bar { gap: 6px; padding: 8px 10px; }
+  .hm-entry-bar #entry-order-toggle .label { display: none; }
+  .hm-entry-bar #entry-order-toggle {
+    min-width: 40px; width: 40px; padding: 0;
+    border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .hm-entry-bar .btn-primary { padding: 0 12px; font-size: 12px; }
+  .hm-entry-progress { padding: 4px 9px; }
+  .hm-entry-progress .k { display: none; } /* "Done" label drops; pure n/35 reads cleanly */
+  .hm-entry-meta strong { font-size: 12px; }
+  .hm-entry-mode-tag { font-size: 8px; padding: 2px 6px; }
+}
+
+/* Very tight (iPhone SE 320px): drop the tag pill, shorten Save action,
+ * collapse progress to icon-tight. Date stays readable. */
+@media (max-width: 360px) {
+  .hm-entry-bar { gap: 5px; padding: 8px; }
+  .hm-entry-bar #entry-exit { min-width: 36px; width: 36px; min-height: 36px; }
+  .hm-entry-bar #entry-order-toggle { min-width: 36px; width: 36px; min-height: 36px; }
+  .hm-entry-bar .btn-primary { min-height: 36px; padding: 0 10px; font-size: 12px; }
+  .hm-entry-bar .btn-primary .label-long { display: none; }
+  .hm-entry-bar .btn-primary .label-short { display: inline; }
+  .hm-entry-mode-tag { display: none; }
+  .hm-entry-progress { padding: 3px 8px; min-height: 32px; }
+  .hm-entry-progress .v { font-size: 12px; }
+  .hm-entry-meta strong { font-size: 13px; }
 }
 
 .hm-entry-stage {
@@ -783,125 +889,208 @@ a { color: inherit; text-decoration: none; }
 @media (min-width: 900px) {
   .hm-entry-stage { grid-template-rows: 1fr; grid-template-columns: 1fr 380px; }
 }
+/* Canvas wrap — match .hm-canvas-wrap (rounded, bordered card on a padded stage). */
 .hm-entry-canvas-wrap {
   position: relative; min-height: 0;
-  background: linear-gradient(180deg, #0e1a2c, #0a1320);
   display: flex; align-items: center; justify-content: center;
-  padding: 14px; overflow: hidden;
+  padding: 12px; overflow: hidden;
+}
+.hm-entry-canvas-wrap::before {
+  content: ""; position: absolute;
+  inset: 12px;
+  background: linear-gradient(180deg, #0e1a2c, #0a1320);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  pointer-events: none;
 }
 .hm-entry-canvas-wrap #entry-rink {
+  position: relative; z-index: 1;
   display: block; max-width: 100%; max-height: 100%;
   cursor: crosshair; touch-action: manipulation;
 }
+@media (max-width: 640px) {
+  .hm-entry-canvas-wrap { padding: 10px; }
+  .hm-entry-canvas-wrap::before { inset: 10px; border-radius: 10px; }
+}
 
+/* Sheet — surface card with a subtle drag-handle echo. */
 .hm-entry-sheet {
   background: var(--surface); border-top: 1px solid var(--border);
-  padding: 12px 14px calc(12px + var(--sa-bottom));
+  padding: 14px 14px calc(14px + var(--sa-bottom));
   display: flex; flex-direction: column; gap: 12px;
   max-height: 55vh; overflow-y: auto; overscroll-behavior: contain;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
 }
 @media (min-width: 900px) {
-  .hm-entry-sheet { border-top: none; border-left: 1px solid var(--border); max-height: none; }
+  .hm-entry-sheet { border-top: none; border-left: 1px solid var(--border); max-height: none; box-shadow: none; }
 }
 .hm-entry-sheet-head {
-  display: grid; grid-template-columns: 56px 1fr 56px;
-  gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 48px 1fr 48px;
+  gap: 12px; align-items: center;
 }
+
+/* Prev/Next — pill buttons matching .hm-mode aesthetic, SVG-style chevrons. */
 .hm-entry-nav {
-  height: 56px; width: 56px; border-radius: 12px;
+  height: 48px; width: 48px; border-radius: 12px;
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); font-size: 22px; cursor: pointer;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
   -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+  font-size: 0; /* hide raw glyph; chevron is drawn via ::before */
+  position: relative;
 }
-.hm-entry-nav:hover { background: var(--surface); border-color: var(--accent); }
-.hm-entry-nav:disabled { opacity: 0.35; cursor: not-allowed; }
+.hm-entry-nav::before {
+  content: ""; display: block;
+  width: 10px; height: 10px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  border-radius: 1px;
+  color: var(--text);
+}
+.hm-entry-nav#entry-prev::before  { transform: rotate(-135deg); margin-left: 3px; }
+.hm-entry-nav#entry-next::before  { transform: rotate(45deg);   margin-right: 3px; }
+.hm-entry-nav:hover:not(:disabled) {
+  background: var(--surface-3); border-color: var(--accent);
+}
+.hm-entry-nav:hover:not(:disabled)::before { color: var(--accent); }
+.hm-entry-nav:active:not(:disabled) { transform: scale(.95); }
+.hm-entry-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Center: point chip — visually balanced "POINT N + (col, row)" stack. */
 .hm-entry-pt {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; text-align: center;
 }
 .hm-entry-pt-num {
-  font-size: 32px; font-weight: 800; color: var(--accent);
-  font-variant-numeric: tabular-nums; line-height: 1;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 4px 12px; border-radius: 999px;
+  background: rgba(78, 197, 255, 0.14);
+  border: 1px solid rgba(78, 197, 255, 0.35);
+  color: var(--accent);
+  font-size: 22px; font-weight: 800;
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+  box-shadow: 0 0 12px rgba(78, 197, 255, 0.18);
 }
-.hm-entry-pt-label { font-size: 12px; color: var(--muted); }
+.hm-entry-pt-num::before {
+  content: "PT"; font-size: 9px; font-weight: 700;
+  letter-spacing: 0.1em; opacity: 0.75;
+  align-self: center;
+}
+.hm-entry-pt-label {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
 
 .hm-entry-fields { display: flex; flex-direction: column; gap: 10px; }
 .hm-entry-field {
   display: flex; flex-direction: column; gap: 4px;
-  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+  font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
 }
 .hm-entry-field input {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 10px;
   padding: 12px 14px; font: inherit; font-size: 18px;
   font-variant-numeric: tabular-nums; min-height: 52px;
   -webkit-appearance: none; appearance: none;
   text-transform: none; letter-spacing: 0;
+  font-weight: 600;
 }
-.hm-entry-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.hm-entry-field input.warn   { border-color: var(--warn); }
-.hm-entry-field input.danger { border-color: var(--danger); }
+.hm-entry-field input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(78, 197, 255, 0.18);
+}
+.hm-entry-field input.warn   { border-color: var(--warn); box-shadow: 0 0 0 3px rgba(255, 177, 78, 0.14); }
+.hm-entry-field input.danger { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(255, 78, 110, 0.16); }
+
 .hm-entry-hint {
-  font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0;
+  font-size: 11px; color: var(--muted);
+  text-transform: none; letter-spacing: 0; font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.hm-entry-hint .delta { font-weight: 600; }
+.hm-entry-hint .delta { font-weight: 700; }
 .hm-entry-hint .delta.up   { color: var(--good); }
 .hm-entry-hint .delta.down { color: var(--warn); }
 .hm-entry-hint .delta.flag { color: var(--danger); }
 
 .hm-entry-flag {
-  border-radius: 8px; padding: 8px 12px;
-  font-size: 12px; line-height: 1.4;
-  border: 1px solid var(--warn); background: rgba(255, 180, 60, 0.08);
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 12px; line-height: 1.45;
+  border: 1px solid rgba(255, 177, 78, 0.45);
+  background: rgba(255, 180, 60, 0.10);
   color: var(--warn);
 }
-.hm-entry-flag.danger { border-color: var(--danger); background: rgba(255, 78, 110, 0.08); color: var(--danger); }
-.hm-entry-flag strong { font-weight: 700; }
+.hm-entry-flag.danger {
+  border-color: rgba(255, 78, 110, 0.5);
+  background: rgba(255, 78, 110, 0.10);
+  color: var(--danger);
+}
+.hm-entry-flag strong { font-weight: 800; display: inline-block; margin-right: 4px; }
 
+/* Skip / Clear — ghost-button vocab. */
 .hm-entry-actions {
-  display: flex; gap: 8px; flex-wrap: wrap;
+  display: flex; gap: 8px;
 }
 .hm-entry-actions button {
-  flex: 1; min-height: 40px; border-radius: 8px;
-  background: transparent; color: var(--muted);
+  flex: 1; min-height: 40px; border-radius: 10px;
+  background: var(--surface-2); color: var(--muted);
   border: 1px solid var(--border);
-  font: inherit; font-size: 12px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
 }
-.hm-entry-actions button:hover { background: var(--surface-2); color: var(--text); }
+.hm-entry-actions button:hover {
+  background: var(--surface-3); color: var(--text); border-color: var(--border-strong);
+}
+.hm-entry-actions button:active { transform: scale(.97); }
 
 /* End-of-session summary */
 .hm-summary-dialog {
   width: min(540px, 95vw); padding: 0; border: 1px solid var(--border);
   border-radius: 14px; background: var(--surface); color: var(--text);
   max-height: 90dvh;
+  box-shadow: var(--shadow-lift);
 }
 .hm-summary-dialog::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(2px); }
 .hm-summary-dialog form {
-  margin: 0; display: flex; flex-direction: column; gap: 12px;
+  margin: 0; display: flex; flex-direction: column; gap: 14px;
   padding: 18px 18px calc(18px + var(--sa-bottom));
   max-height: 90dvh;
 }
 #entry-summary-body {
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 8px;
   overflow-y: auto; min-height: 0;
 }
 .hm-summary-stat {
-  display: flex; justify-content: space-between; gap: 12px;
-  padding: 8px 12px; border-radius: 8px; background: var(--surface-2);
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
   font-size: 13px;
 }
-.hm-summary-stat .v { font-weight: 600; font-variant-numeric: tabular-nums; }
-.hm-summary-stat.warn .v { color: var(--warn); }
+.hm-summary-stat > span:first-child {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+.hm-summary-stat .v { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.hm-summary-stat.warn   { border-color: rgba(255, 177, 78, 0.4); background: rgba(255, 177, 78, 0.08); }
+.hm-summary-stat.warn .v   { color: var(--warn); }
+.hm-summary-stat.danger { border-color: rgba(255, 78, 110, 0.5); background: rgba(255, 78, 110, 0.10); }
+.hm-summary-stat.danger > span:first-child { color: var(--danger); }
 .hm-summary-stat.danger .v { color: var(--danger); }
 .hm-summary-flags {
   display: flex; flex-direction: column; gap: 4px;
   font-size: 12px; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 4px;
 }
 .hm-summary-flags .row {
-  display: grid; grid-template-columns: 60px 1fr;
-  padding: 4px 12px; border-left: 2px solid var(--warn);
+  display: grid; grid-template-columns: 64px 1fr;
+  padding: 5px 12px; border-left: 2px solid var(--warn);
   font-variant-numeric: tabular-nums;
+  margin: 0 8px;
 }
 .hm-summary-flags .row.danger { border-left-color: var(--danger); color: var(--danger); }
 
