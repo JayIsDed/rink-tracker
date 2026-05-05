@@ -679,6 +679,232 @@ a { color: inherit; text-decoration: none; }
 .hm-entry-row input.warn { border-color: var(--warn); }
 .hm-entry-row input.danger { border-color: var(--danger); }
 
+/* ── Entry split (New Session / Edit) ─────────────────────────────────── */
+.hm-entry-split {
+  display: inline-flex; margin-left: auto; gap: 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 3px;
+}
+.hm-entry-split .hm-entry-btn { margin-left: 0; min-height: 36px; padding: 0 12px; border-radius: 6px; }
+.hm-entry-split .hm-entry-btn.ghost {
+  background: transparent; color: var(--muted); font-weight: 600;
+}
+.hm-entry-split .hm-entry-btn.ghost:hover { background: var(--surface); color: var(--text); }
+@media (max-width: 480px) {
+  .hm-entry-split .hm-entry-btn.primary span:not(.hm-entry-plus) { display: none; }
+  .hm-entry-split .hm-entry-btn.ghost { padding: 0 10px; }
+}
+
+/* ── Start-session dialog (compact, picks date + intent) ──────────────── */
+.hm-start-dialog {
+  width: min(420px, 92vw); padding: 0; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--surface); color: var(--text);
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.hm-start-dialog::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(2px); }
+.hm-start-dialog form {
+  margin: 0; display: flex; flex-direction: column; gap: 14px;
+  padding: 18px 18px calc(18px + var(--sa-bottom));
+}
+.hm-start-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 2px;
+}
+.hm-start-header h3 { margin: 0; font-size: 16px; }
+.hm-start-dialog .ctl {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.hm-start-dialog input[type="date"],
+.hm-start-dialog select {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  padding: 10px 12px; border-radius: 8px; font: inherit; font-size: 15px;
+  min-height: 44px; color-scheme: dark; text-transform: none; letter-spacing: 0;
+}
+.hm-start-status {
+  font-size: 12px; min-height: 18px;
+  color: var(--muted); padding: 4px 0;
+}
+.hm-start-status.warn  { color: var(--warn); }
+.hm-start-status.err   { color: var(--danger); }
+.hm-start-status.ok    { color: var(--good); }
+.hm-start-actions {
+  display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px;
+}
+.hm-start-actions button { min-height: 44px; padding: 0 16px; border-radius: 8px; font: inherit; cursor: pointer; }
+.btn-primary {
+  background: var(--accent); color: #001627; border: none; font-weight: 700;
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost {
+  background: transparent; color: var(--text); border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--surface-2); }
+.hm-draft-summary {
+  margin: 0; font-size: 13px; color: var(--text); line-height: 1.5;
+}
+.hm-draft-summary strong { color: var(--accent); }
+
+/* ── Entry mode (full-screen takeover — above shell + peek bar) ───────── */
+.hm-entry-mode {
+  position: fixed; inset: 0; z-index: 40;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column;
+  padding-top: var(--sa-top);
+}
+.hm-entry-mode[hidden] { display: none; }
+.hm-entry-fields[hidden], .hm-entry-flag[hidden] { display: none; }
+.hm-entry-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.hm-entry-bar .btn-ghost,
+.hm-entry-bar .btn-primary { min-height: 40px; padding: 0 14px; border-radius: 8px; font: inherit; cursor: pointer; }
+.hm-entry-meta { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.hm-entry-meta strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.hm-entry-mode-tag {
+  font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.hm-entry-mode-tag.editing { color: var(--warn); }
+.hm-entry-progress {
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 13px; font-weight: 600;
+}
+
+.hm-entry-stage {
+  flex: 1; display: grid; grid-template-rows: 1fr auto;
+  min-height: 0; overflow: hidden;
+}
+@media (min-width: 900px) {
+  .hm-entry-stage { grid-template-rows: 1fr; grid-template-columns: 1fr 380px; }
+}
+.hm-entry-canvas-wrap {
+  position: relative; min-height: 0;
+  background: linear-gradient(180deg, #0e1a2c, #0a1320);
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px; overflow: hidden;
+}
+.hm-entry-canvas-wrap #entry-rink {
+  display: block; max-width: 100%; max-height: 100%;
+  cursor: crosshair; touch-action: manipulation;
+}
+
+.hm-entry-sheet {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 12px 14px calc(12px + var(--sa-bottom));
+  display: flex; flex-direction: column; gap: 12px;
+  max-height: 55vh; overflow-y: auto; overscroll-behavior: contain;
+}
+@media (min-width: 900px) {
+  .hm-entry-sheet { border-top: none; border-left: 1px solid var(--border); max-height: none; }
+}
+.hm-entry-sheet-head {
+  display: grid; grid-template-columns: 56px 1fr 56px;
+  gap: 10px; align-items: center;
+}
+.hm-entry-nav {
+  height: 56px; width: 56px; border-radius: 12px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); font-size: 22px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hm-entry-nav:hover { background: var(--surface); border-color: var(--accent); }
+.hm-entry-nav:disabled { opacity: 0.35; cursor: not-allowed; }
+.hm-entry-pt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  text-align: center;
+}
+.hm-entry-pt-num {
+  font-size: 32px; font-weight: 800; color: var(--accent);
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.hm-entry-pt-label { font-size: 12px; color: var(--muted); }
+
+.hm-entry-fields { display: flex; flex-direction: column; gap: 10px; }
+.hm-entry-field {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.hm-entry-field input {
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; font: inherit; font-size: 18px;
+  font-variant-numeric: tabular-nums; min-height: 52px;
+  -webkit-appearance: none; appearance: none;
+  text-transform: none; letter-spacing: 0;
+}
+.hm-entry-field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.hm-entry-field input.warn   { border-color: var(--warn); }
+.hm-entry-field input.danger { border-color: var(--danger); }
+.hm-entry-hint {
+  font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.hm-entry-hint .delta { font-weight: 600; }
+.hm-entry-hint .delta.up   { color: var(--good); }
+.hm-entry-hint .delta.down { color: var(--warn); }
+.hm-entry-hint .delta.flag { color: var(--danger); }
+
+.hm-entry-flag {
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 12px; line-height: 1.4;
+  border: 1px solid var(--warn); background: rgba(255, 180, 60, 0.08);
+  color: var(--warn);
+}
+.hm-entry-flag.danger { border-color: var(--danger); background: rgba(255, 78, 110, 0.08); color: var(--danger); }
+.hm-entry-flag strong { font-weight: 700; }
+
+.hm-entry-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.hm-entry-actions button {
+  flex: 1; min-height: 40px; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.hm-entry-actions button:hover { background: var(--surface-2); color: var(--text); }
+
+/* End-of-session summary */
+.hm-summary-dialog {
+  width: min(540px, 95vw); padding: 0; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--surface); color: var(--text);
+  max-height: 90dvh;
+}
+.hm-summary-dialog::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(2px); }
+.hm-summary-dialog form {
+  margin: 0; display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 18px calc(18px + var(--sa-bottom));
+  max-height: 90dvh;
+}
+#entry-summary-body {
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; min-height: 0;
+}
+.hm-summary-stat {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 8px 12px; border-radius: 8px; background: var(--surface-2);
+  font-size: 13px;
+}
+.hm-summary-stat .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.hm-summary-stat.warn .v { color: var(--warn); }
+.hm-summary-stat.danger .v { color: var(--danger); }
+.hm-summary-flags {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: var(--muted);
+}
+.hm-summary-flags .row {
+  display: grid; grid-template-columns: 60px 1fr;
+  padding: 4px 12px; border-left: 2px solid var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+.hm-summary-flags .row.danger { border-left-color: var(--danger); color: var(--danger); }
+
 /* ──────────────────────────────────────────────────────────────────────
    ISSUES TAB — list, FAB, new-issue sheet, detail dialog (step 3)
    ────────────────────────────────────────────────────────────────────── */

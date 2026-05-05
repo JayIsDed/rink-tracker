@@ -87,6 +87,43 @@ const qDeleteMeasurement = db.query(
   `DELETE FROM measurements WHERE rink_code=$rink AND point_nbr=$pt AND measure_date=$date`
 );
 
+// Per-point trailing baseline before a date — drives entry-mode anomaly flags.
+// Same trailing math as anomalies but without a "current" value (entry hasn't been
+// saved yet) and date-exclusive (so re-editing today doesn't poison its own baseline).
+const qBaseline = db.query<
+  { point_nbr: number; mean: number; std: number; n: number; last: number | null; last_date: string | null },
+  [string, string, string]
+>(`
+  WITH trailing AS (
+    SELECT point_nbr,
+           AVG(depth_in) AS mean,
+           CASE WHEN COUNT(depth_in) > 1 THEN
+             SQRT(MAX(0.0, AVG(depth_in*depth_in) - AVG(depth_in)*AVG(depth_in)))
+           ELSE 0 END AS std,
+           COUNT(depth_in) AS n
+    FROM measurements
+    WHERE rink_code = $1
+      AND depth_in IS NOT NULL
+      AND measure_date < $2
+      AND measure_date >= date($2, '-' || $3 || ' days')
+    GROUP BY point_nbr
+  ),
+  most_recent AS (
+    SELECT m.point_nbr, m.depth_in AS last, m.measure_date AS last_date
+    FROM measurements m
+    JOIN (
+      SELECT point_nbr, MAX(measure_date) AS d
+      FROM measurements
+      WHERE rink_code = $1 AND depth_in IS NOT NULL AND measure_date < $2
+      GROUP BY point_nbr
+    ) x ON x.point_nbr = m.point_nbr AND x.d = m.measure_date
+    WHERE m.rink_code = $1
+  )
+  SELECT t.point_nbr, t.mean, t.std, t.n, r.last, r.last_date
+  FROM trailing t LEFT JOIN most_recent r ON r.point_nbr = t.point_nbr
+  ORDER BY t.point_nbr
+`);
+
 const qAnomalies = db.query<
   { point_nbr: number; current: number | null; mean: number; std: number; n: number },
   [string, string, string]
@@ -160,6 +197,15 @@ export function handleGetAnomalies(url: URL): Response {
     ...r,
     z: r.std > 0 && r.current != null ? (r.current - r.mean) / r.std : 0,
   })));
+}
+
+export function handleGetBaseline(url: URL): Response {
+  const before = url.searchParams.get("before");
+  const windowDays = Number(url.searchParams.get("window") ?? "30");
+  if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+    return json({ error: "missing or invalid ?before=YYYY-MM-DD" }, 400);
+  }
+  return json(qBaseline.all(getRink(url), before, String(windowDays)));
 }
 
 export function handleGetWeatherAll(): Response {

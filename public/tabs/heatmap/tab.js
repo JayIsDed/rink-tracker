@@ -734,138 +734,483 @@ export async function init(shellCtx) {
     return `<span class="hm-chip"><span class="k">${key}</span><span class="v${valClass ? ' ' + valClass : ''}">${val}</span></span>`;
   }
 
-  // ───── entry form ───────────────────────────────────────────────────
+  // ───── entry mode (canvas press-on-spot point-by-point) ────────────────
   function todayISO() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   }
-  async function openEntry(prefillDate) {
-    const dialog = $("#entry-dialog");
-    const grid = $("#entry-grid");
-    const date = prefillDate ?? todayISO();
-    $("#entry-date").value = date;
-    $("#entry-status").textContent = "";
-    $("#entry-status").className = "hm-entry-status";
-    grid.innerHTML = "";
-    for (let pt = 1; pt <= 35; pt++) {
-      const row = document.createElement("div");
-      row.className = "hm-entry-row";
-      row.dataset.pt = pt;
-      row.innerHTML = `
-        <div class="pt">${pt}</div>
-        <label>
-          <span>Depth (in)</span>
-          <input type="text" inputmode="decimal" autocomplete="off"
-                 data-pt="${pt}" data-field="depth"
-                 placeholder="—" pattern="[0-9]*\\.?[0-9]*">
-        </label>
-        <label>
-          <span>Temp (°F)</span>
-          <input type="text" inputmode="decimal" autocomplete="off"
-                 data-pt="${pt}" data-field="temp"
-                 placeholder="—" pattern="-?[0-9]*\\.?[0-9]*">
-        </label>
-      `;
-      grid.appendChild(row);
-    }
-    grid.addEventListener("input", onEntryInput);
-    await loadEntryFor(date);
-    dialog.showModal();
-    setTimeout(() => grid.querySelector("input[data-field='depth']")?.focus(), 50);
-  }
-  function onEntryInput(e) {
-    const inp = e.target;
-    if (!(inp instanceof HTMLInputElement)) return;
-    const v = inp.value.trim();
-    inp.classList.remove("warn", "danger");
-    const row = inp.closest(".hm-entry-row");
-    if (!v) { row?.classList.toggle("has-data", rowHasAnyData(row)); return; }
-    const n = Number(v);
-    if (!Number.isFinite(n)) { inp.classList.add("danger"); return; }
-    const field = inp.dataset.field;
-    if (field === "depth") {
-      if (n < 0 || n > 24) inp.classList.add("danger");
-      else if (n < 1) inp.classList.add("warn");
-    } else {
-      if (n < -40 || n > 100) inp.classList.add("danger");
-      else if (n < 10 || n > 40) inp.classList.add("warn");
-    }
-    row?.classList.toggle("has-data", true);
-  }
-  function rowHasAnyData(row) {
-    return row && Array.from(row.querySelectorAll("input")).some(i => i.value.trim() !== "");
-  }
-  async function loadEntryFor(date) {
-    $("#entry-subtitle").textContent = `for ${date}`;
-    const grid = $("#entry-grid");
-    const existing = await fetch(`/api/measurements?date=${date}&rink=${state.rinkCode}`)
-      .then(r => r.json()).catch(() => []);
-    const map = new Map(existing.map(e => [e.point_nbr, e]));
-    let filled = 0;
-    for (let pt = 1; pt <= 35; pt++) {
-      const m = map.get(pt);
-      const row = grid.querySelector(`.hm-entry-row[data-pt="${pt}"]`);
-      if (!row) continue;
-      const dInp = row.querySelector(`input[data-field="depth"]`);
-      const tInp = row.querySelector(`input[data-field="temp"]`);
-      dInp.value = m?.depth_in ?? "";
-      tInp.value = m?.temp_f ?? "";
-      const has = (m?.depth_in != null) || (m?.temp_f != null);
-      row.classList.toggle("has-data", has);
-      if (has) filled++;
-    }
-    $("#entry-status").textContent =
-      filled > 0 ? `${filled}/35 points already have data on ${date} — editing existing entries.`
-                 : `new session — no readings yet for ${date}.`;
-    $("#entry-status").className = "hm-entry-status";
-  }
-  async function fillFromLatest() {
-    if (!state.dates.length) return;
-    const latest = state.dates[state.dates.length - 1].measure_date;
-    const data = await fetch(`/api/measurements?date=${latest}&rink=${state.rinkCode}`).then(r => r.json());
-    const map = new Map(data.map(e => [e.point_nbr, e]));
-    const grid = $("#entry-grid");
-    for (let pt = 1; pt <= 35; pt++) {
-      const m = map.get(pt);
-      const row = grid.querySelector(`.hm-entry-row[data-pt="${pt}"]`);
-      const dInp = row.querySelector(`input[data-field="depth"]`);
-      const tInp = row.querySelector(`input[data-field="temp"]`);
-      if (m?.depth_in != null) dInp.value = m.depth_in;
-      if (m?.temp_f   != null) tInp.value = m.temp_f;
-      if (m) row.classList.add("has-data");
-    }
-    $("#entry-status").textContent = `pre-filled from ${latest} — edit any cell, blank = skip that point.`;
-    $("#entry-status").className = "hm-entry-status";
-  }
-  async function saveEntry(e) {
-    e.preventDefault();
-    const date = $("#entry-date").value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      $("#entry-status").textContent = "pick a valid date";
-      $("#entry-status").className = "hm-entry-status err"; return;
-    }
-    const entries = [];
-    const grid = $("#entry-grid");
-    for (let pt = 1; pt <= 35; pt++) {
-      const row = grid.querySelector(`.hm-entry-row[data-pt="${pt}"]`);
-      const dInp = row.querySelector(`input[data-field="depth"]`);
-      const tInp = row.querySelector(`input[data-field="temp"]`);
-      if (dInp.classList.contains("danger") || tInp.classList.contains("danger")) {
-        $("#entry-status").textContent = `point ${pt}: invalid value — fix red fields`;
-        $("#entry-status").className = "hm-entry-status err"; return;
-      }
-      const dv = dInp.value.trim(), tv = tInp.value.trim();
-      if (!dv && !tv) continue;
-      entries.push({ point_nbr: pt, depth_in: dv === "" ? null : Number(dv), temp_f: tv === "" ? null : Number(tv) });
-    }
-    if (entries.length === 0) {
-      $("#entry-status").textContent = "nothing to save — fill at least one row";
-      $("#entry-status").className = "hm-entry-status err"; return;
-    }
-    const btn = $("#entry-save");
-    btn.disabled = true; btn.textContent = "Saving…";
 
-    const payload = { rink_code: state.rinkCode, date, entries };
+  // Serpentine = walk physically left-to-right, alternating column direction so
+  // we don't teleport from top-of-col-N back to bottom-of-col-N+1.
+  // Numbering: col K's points are listed top→bottom as (K*5)…(K*5-4); so col 1 =
+  // pts 5,4,3,2,1. Even cols (1-indexed) walk bottom→top, odd cols top→bottom —
+  // mirrors the operator's actual walk down/up the rink.
+  function serpentineOrder() {
+    const order = [];
+    for (let col = 0; col < 7; col++) {
+      const top = (col + 1) * 5;     // pt at Y_LINE[0]
+      const bot = top - 4;           // pt at Y_LINE[4]
+      if (col % 2 === 0) {
+        for (let p = bot; p <= top; p++) order.push(p); // bottom-to-top
+      } else {
+        for (let p = top; p >= bot; p--) order.push(p); // top-to-bottom
+      }
+    }
+    return order;
+  }
+  function numericOrder() { return Array.from({ length: 35 }, (_, i) => i + 1); }
+
+  // Local-storage draft persistence — keyed by rink+date.
+  const draftKey = (rink, date) => `rt:draft:${rink}:${date}`;
+  function readDraft(rink, date) {
+    try { return JSON.parse(localStorage.getItem(draftKey(rink, date)) || "null"); }
+    catch { return null; }
+  }
+  function writeDraft(rink, date, payload) {
+    try { localStorage.setItem(draftKey(rink, date), JSON.stringify(payload)); }
+    catch { /* quota / private mode — non-fatal */ }
+  }
+  function clearDraft(rink, date) {
+    try { localStorage.removeItem(draftKey(rink, date)); } catch {}
+  }
+  function listDrafts(rink) {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(`rt:draft:${rink}:`)) continue;
+        const date = k.split(":").pop();
+        const v = readDraft(rink, date);
+        if (v) out.push({ date, ...v });
+      }
+    } catch {}
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // Entry-mode state — separate from the read-mode `state` so they can coexist.
+  // entries: Map<point_nbr, {depth_in?, temp_f?, skipped?}>
+  // baseline: Map<point_nbr, {mean, std, n, last, last_date}>
+  const entry = {
+    active: false,
+    mode: "new",      // "new" | "edit"
+    date: null,
+    order: "serpentine",
+    orderList: [],
+    idx: 0,
+    entries: new Map(),
+    baseline: new Map(),
+    initialEntries: new Map(),  // for "edit" mode, snapshot of existing readings
+    rinkCode: "U",
+  };
+  const entryCanvas = $("#entry-rink");
+  const entryCx = entryCanvas?.getContext("2d");
+  let entryCachedSize = { cssW: 0, cssH: 0 };
+  let entryResizeRO = null;
+
+  function entryHasData(pt) {
+    const e = entry.entries.get(pt);
+    if (!e) return false;
+    if (e.skipped) return true;
+    return e.depth_in != null || e.temp_f != null;
+  }
+  function entryEffectiveCount() {
+    let n = 0;
+    for (const e of entry.entries.values()) if (!e.skipped && (e.depth_in != null || e.temp_f != null)) n++;
+    return n;
+  }
+
+  function flagFor(pt, depthVal) {
+    if (depthVal == null || !Number.isFinite(depthVal)) return null;
+    const b = entry.baseline.get(pt);
+    if (!b || b.n < 3 || b.std === 0) return null;
+    const z = (depthVal - b.mean) / b.std;
+    if (Math.abs(z) >= 3) return { level: "danger", z, mean: b.mean, last: b.last, last_date: b.last_date };
+    if (Math.abs(z) >= 2) return { level: "warn", z, mean: b.mean, last: b.last, last_date: b.last_date };
+    return null;
+  }
+
+  function applyEntryCanvasSize() {
+    if (!entryCanvas) return;
+    const wrap = entryCanvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const aspect = RINK_W / RINK_H;
+    const padding = 14;
+    const wAvail = Math.max(0, wrap.clientWidth - padding * 2);
+    const hAvail = Math.max(0, wrap.clientHeight - padding * 2);
+    let cssW, cssH;
+    if (wAvail / hAvail > aspect) { cssH = hAvail; cssW = cssH * aspect; }
+    else { cssW = wAvail; cssH = cssW / aspect; }
+    cssW = Math.floor(cssW); cssH = Math.floor(cssH);
+    if (cssW === entryCachedSize.cssW && cssH === entryCachedSize.cssH) return;
+    entryCachedSize = { cssW, cssH };
+    entryCanvas.style.width = cssW + "px";
+    entryCanvas.style.height = cssH + "px";
+    entryCanvas.width = Math.round(cssW * dpr);
+    entryCanvas.height = Math.round(cssH * dpr);
+    entryCx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function renderEntryCanvas() {
+    if (!entryCx) return;
+    if (entryCachedSize.cssW === 0) applyEntryCanvasSize();
+    const { cssW, cssH } = entryCachedSize;
+    if (!cssW) return;
+    const scale = cssW / RINK_W;
+    entryCx.clearRect(0, 0, cssW, cssH);
+
+    const outline = rinkOutlinePath(scale);
+    entryCx.save();
+    entryCx.fillStyle = "#0a1320";
+    entryCx.fill(outline);
+    entryCx.restore();
+
+    entryCx.lineWidth = 2;
+    entryCx.strokeStyle = "#3a4a60";
+    entryCx.stroke(outline);
+
+    const px = ftToPx(scale);
+    // Subtle rink markings — minimal so the points stand out
+    entryCx.strokeStyle = "rgba(31, 85, 196, 0.5)"; entryCx.lineWidth = 1;
+    entryCx.beginPath();
+    entryCx.moveTo(...px(MARK.blueLineLeft, 0));  entryCx.lineTo(...px(MARK.blueLineLeft, RINK_H));
+    entryCx.moveTo(...px(MARK.blueLineRight, 0)); entryCx.lineTo(...px(MARK.blueLineRight, RINK_H));
+    entryCx.stroke();
+    entryCx.strokeStyle = "rgba(204, 34, 34, 0.5)";
+    entryCx.beginPath();
+    entryCx.moveTo(...px(MARK.centerLine, 0)); entryCx.lineTo(...px(MARK.centerLine, RINK_H));
+    entryCx.stroke();
+
+    const currentPt = entry.orderList[entry.idx];
+    for (const p of state.points) {
+      const xy = POINT_XY.get(p.point_nbr);
+      if (!xy) continue;
+      const [ax, ay] = px(xy.x, xy.y);
+      const e = entry.entries.get(p.point_nbr);
+      const isCurrent = p.point_nbr === currentPt;
+      const hasData = e && !e.skipped && (e.depth_in != null || e.temp_f != null);
+      const isSkipped = e?.skipped;
+
+      // Background ring for state
+      let fill = "#445", stroke = "#0a1320", textColor = "#0a1320";
+      if (hasData) {
+        const flag = flagFor(p.point_nbr, e.depth_in);
+        if (flag?.level === "danger")    { fill = "rgba(255, 78, 110, 0.85)"; stroke = "#ff4e6e"; }
+        else if (flag?.level === "warn") { fill = "rgba(255, 200, 60, 0.85)"; stroke = "#ffc83c"; }
+        else                             { fill = "rgba(80, 220, 160, 0.9)";  stroke = "#50dca0"; textColor = "#001d11"; }
+      } else if (isSkipped) {
+        fill = "rgba(140, 140, 140, 0.3)"; stroke = "#5a6478"; textColor = "#aaa";
+      }
+
+      const r = isCurrent ? 13 : 10;
+      if (isCurrent) {
+        // Pulse ring
+        const t = (Date.now() % 1200) / 1200;
+        const pulseR = r + 6 + Math.sin(t * Math.PI * 2) * 4;
+        entryCx.beginPath();
+        entryCx.arc(ax, ay, pulseR, 0, Math.PI * 2);
+        entryCx.strokeStyle = "rgba(78, 197, 255, 0.7)";
+        entryCx.lineWidth = 2;
+        entryCx.stroke();
+      }
+      entryCx.beginPath();
+      entryCx.arc(ax, ay, r, 0, Math.PI * 2);
+      entryCx.fillStyle = fill;
+      entryCx.fill();
+      entryCx.lineWidth = isCurrent ? 3 : 2;
+      entryCx.strokeStyle = isCurrent ? "#fff" : stroke;
+      entryCx.stroke();
+      entryCx.fillStyle = textColor;
+      entryCx.font = "bold 12px system-ui, sans-serif";
+      entryCx.textAlign = "center"; entryCx.textBaseline = "middle";
+      entryCx.fillText(String(p.point_nbr), ax, ay);
+
+      if (isSkipped) {
+        entryCx.strokeStyle = "rgba(200, 200, 200, 0.6)"; entryCx.lineWidth = 1.5;
+        entryCx.beginPath();
+        entryCx.moveTo(ax - r/2, ay - r/2); entryCx.lineTo(ax + r/2, ay + r/2);
+        entryCx.moveTo(ax + r/2, ay - r/2); entryCx.lineTo(ax - r/2, ay + r/2);
+        entryCx.stroke();
+      }
+    }
+  }
+
+  let entryAnimRAF = 0;
+  function startEntryAnim() {
+    cancelAnimationFrame(entryAnimRAF);
+    const tick = () => {
+      if (!entry.active) return;
+      renderEntryCanvas();
+      entryAnimRAF = requestAnimationFrame(tick);
+    };
+    entryAnimRAF = requestAnimationFrame(tick);
+  }
+  function stopEntryAnim() { cancelAnimationFrame(entryAnimRAF); }
+
+  function entryPointAtCanvasXY(cssx, cssy) {
+    const scale = entryCachedSize.cssW / RINK_W;
+    const hitR = isMobile() ? 28 : 20;
+    for (const p of state.points) {
+      const xy = POINT_XY.get(p.point_nbr);
+      if (!xy) continue;
+      const px_ = xy.x * scale, py_ = xy.y * scale;
+      const dx = cssx - px_, dy = cssy - py_;
+      if (dx*dx + dy*dy <= hitR*hitR) return p;
+    }
+    return null;
+  }
+
+  function renderEntrySheet() {
+    const pt = entry.orderList[entry.idx];
+    if (pt == null) return;
+    $("#entry-pt-num").textContent = String(pt);
+    const point = state.pointMap.get(pt);
+    $("#entry-pt-label").textContent = point ? `col ${point.grid_col}, row ${point.grid_row}` : `point ${pt}`;
+    $("#entry-prev").disabled = entry.idx === 0;
+    $("#entry-next").disabled = entry.idx === entry.orderList.length - 1;
+
+    const rec = entry.entries.get(pt) ?? {};
+    const dInp = $("#entry-depth"), tInp = $("#entry-temp");
+    dInp.value = rec.depth_in != null ? String(rec.depth_in) : "";
+    tInp.value = rec.temp_f   != null ? String(rec.temp_f)   : "";
+    dInp.classList.remove("warn", "danger");
+    tInp.classList.remove("warn", "danger");
+    $("#entry-fields").hidden = false;
+
+    // Hint: last reading + delta
+    const b = entry.baseline.get(pt);
+    const dHint = $("#entry-depth-hint"), tHint = $("#entry-temp-hint");
+    if (b?.last != null) {
+      let extra = "";
+      if (rec.depth_in != null && Number.isFinite(rec.depth_in)) {
+        const delta = rec.depth_in - b.last;
+        const sign = delta >= 0 ? "+" : "";
+        const cls = Math.abs(delta) >= 0.5 ? "flag" : delta >= 0 ? "up" : "down";
+        extra = ` <span class="delta ${cls}">${sign}${delta.toFixed(2)}"</span>`;
+      }
+      dHint.innerHTML = `last: ${b.last.toFixed(2)}" (${b.last_date})${extra}`;
+    } else {
+      dHint.textContent = "no prior readings";
+    }
+    tHint.textContent = ""; // temps are too noisy for a useful prior
+
+    // Flag
+    const flagBox = $("#entry-flag");
+    const flag = flagFor(pt, rec.depth_in);
+    if (flag) {
+      flagBox.hidden = false;
+      flagBox.className = `hm-entry-flag${flag.level === "danger" ? " danger" : ""}`;
+      const arrow = flag.z < 0 ? "↓" : "↑";
+      flagBox.innerHTML = `<strong>${arrow} ${Math.abs(flag.z).toFixed(1)}σ off baseline</strong> — trailing-30 mean ${flag.mean.toFixed(2)}", last ${flag.last?.toFixed(2) ?? "—"}". Double-check the reading.`;
+    } else {
+      flagBox.hidden = true;
+    }
+
+    $("#entry-progress").textContent = `${entryEffectiveCount()}/35`;
+  }
+
+  function commitCurrent({ silent = false } = {}) {
+    const pt = entry.orderList[entry.idx];
+    if (pt == null) return true;
+    const dInp = $("#entry-depth"), tInp = $("#entry-temp");
+    const dv = dInp.value.trim(), tv = tInp.value.trim();
+    let depth = null, temp = null;
+    dInp.classList.remove("warn", "danger");
+    tInp.classList.remove("warn", "danger");
+    if (dv) {
+      const n = Number(dv);
+      if (!Number.isFinite(n) || n < 0 || n > 24) {
+        dInp.classList.add("danger");
+        if (!silent) $("#entry-flag").innerHTML = `<strong>Invalid depth</strong> — must be 0–24"`, $("#entry-flag").className = "hm-entry-flag danger", $("#entry-flag").hidden = false;
+        return false;
+      }
+      if (n < 1) dInp.classList.add("warn");
+      depth = n;
+    }
+    if (tv) {
+      const n = Number(tv);
+      if (!Number.isFinite(n) || n < -40 || n > 100) {
+        tInp.classList.add("danger");
+        if (!silent) $("#entry-flag").innerHTML = `<strong>Invalid temp</strong> — must be -40 to 100°F`, $("#entry-flag").className = "hm-entry-flag danger", $("#entry-flag").hidden = false;
+        return false;
+      }
+      if (n < 10 || n > 40) tInp.classList.add("warn");
+      temp = n;
+    }
+    const prev = entry.entries.get(pt) ?? {};
+    if (depth == null && temp == null) {
+      // Empty inputs — drop the entry unless explicitly skipped
+      if (!prev.skipped) entry.entries.delete(pt);
+    } else {
+      entry.entries.set(pt, { ...prev, depth_in: depth, temp_f: temp, skipped: false });
+    }
+    persistDraft();
+    return true;
+  }
+
+  function persistDraft() {
+    if (!entry.active) return;
+    const entriesObj = {};
+    for (const [k, v] of entry.entries) entriesObj[k] = v;
+    writeDraft(entry.rinkCode, entry.date, {
+      mode: entry.mode, order: entry.order, idx: entry.idx,
+      entries: entriesObj, savedAt: Date.now(),
+    });
+  }
+
+  function goToPoint(pt) {
+    if (!entry.active) return;
+    const idx = entry.orderList.indexOf(pt);
+    if (idx < 0) return;
+    if (!commitCurrent()) return;
+    entry.idx = idx;
+    renderEntryCanvas();
+    renderEntrySheet();
+    $("#entry-depth").focus();
+  }
+  function nextPoint() {
+    if (!commitCurrent()) return;
+    if (entry.idx < entry.orderList.length - 1) entry.idx++;
+    renderEntryCanvas(); renderEntrySheet();
+    $("#entry-depth").focus();
+  }
+  function prevPoint() {
+    if (!commitCurrent()) return;
+    if (entry.idx > 0) entry.idx--;
+    renderEntryCanvas(); renderEntrySheet();
+    $("#entry-depth").focus();
+  }
+  function skipCurrent() {
+    const pt = entry.orderList[entry.idx];
+    if (pt == null) return;
+    const prev = entry.entries.get(pt) ?? {};
+    entry.entries.set(pt, { ...prev, depth_in: null, temp_f: null, skipped: true });
+    persistDraft();
+    if (entry.idx < entry.orderList.length - 1) entry.idx++;
+    renderEntryCanvas(); renderEntrySheet();
+  }
+  function clearCurrent() {
+    const pt = entry.orderList[entry.idx];
+    if (pt == null) return;
+    entry.entries.delete(pt);
+    persistDraft();
+    renderEntryCanvas(); renderEntrySheet();
+  }
+
+  async function startEntryMode({ date, mode, order, restoreEntries, restoreIdx }) {
+    entry.active = true;
+    entry.mode = mode;
+    entry.date = date;
+    entry.order = order;
+    entry.orderList = order === "serpentine" ? serpentineOrder() : numericOrder();
+    entry.idx = restoreIdx ?? 0;
+    entry.entries = new Map();
+    entry.initialEntries = new Map();
+    entry.rinkCode = state.rinkCode;
+
+    // Load baseline (trailing 30 days before this date) — drives anomaly flags
+    try {
+      const rows = await fetch(`/api/baseline?rink=${state.rinkCode}&before=${date}&window=30`).then(r => r.json());
+      entry.baseline = new Map(rows.map(r => [r.point_nbr, r]));
+    } catch {
+      entry.baseline = new Map();
+    }
+
+    // For edit mode: prefill from existing readings
+    if (mode === "edit") {
+      try {
+        const existing = await fetch(`/api/measurements?date=${date}&rink=${state.rinkCode}`).then(r => r.json());
+        for (const m of existing) {
+          if (m.depth_in != null || m.temp_f != null) {
+            entry.entries.set(m.point_nbr, { depth_in: m.depth_in, temp_f: m.temp_f });
+            entry.initialEntries.set(m.point_nbr, { depth_in: m.depth_in, temp_f: m.temp_f });
+          }
+        }
+      } catch {}
+    }
+
+    // Restore draft (overrides edit prefill if user was mid-session)
+    if (restoreEntries) {
+      for (const [k, v] of Object.entries(restoreEntries)) entry.entries.set(Number(k), v);
+    }
+
+    // Wire UI
+    $("#entry-mode").hidden = false;
+    $("#entry-mode-date").textContent = date;
+    const tag = $("#entry-mode-tag");
+    tag.textContent = mode === "edit" ? "editing existing" : "new session";
+    tag.className = `hm-entry-mode-tag${mode === "edit" ? " editing" : ""}`;
+    document.body.classList.add("entry-mode-on");
+
+    // Lazy-init resize observer for the entry canvas
+    if (!entryResizeRO) {
+      entryResizeRO = new ResizeObserver(() => { applyEntryCanvasSize(); renderEntryCanvas(); });
+      entryResizeRO.observe(entryCanvas.parentElement);
+    }
+    applyEntryCanvasSize();
+    renderEntryCanvas();
+    renderEntrySheet();
+    startEntryAnim();
+    setTimeout(() => $("#entry-depth").focus(), 50);
+  }
+
+  function exitEntryMode({ saved = false } = {}) {
+    entry.active = false;
+    stopEntryAnim();
+    $("#entry-mode").hidden = true;
+    document.body.classList.remove("entry-mode-on");
+    if (saved) clearDraft(entry.rinkCode, entry.date);
+  }
+
+  function renderSummary() {
+    const body = $("#entry-summary-body");
+    const entered = [], skipped = [], untouched = [], flagged = [];
+    for (const pt of entry.orderList) {
+      const e = entry.entries.get(pt);
+      if (!e) { untouched.push(pt); continue; }
+      if (e.skipped) { skipped.push(pt); continue; }
+      if (e.depth_in == null && e.temp_f == null) { untouched.push(pt); continue; }
+      entered.push(pt);
+      const flag = flagFor(pt, e.depth_in);
+      if (flag) flagged.push({ pt, flag, depth: e.depth_in });
+    }
+    let depthSum = 0, depthN = 0, depthMin = null, depthMinPt = null;
+    for (const pt of entered) {
+      const d = entry.entries.get(pt)?.depth_in;
+      if (d == null) continue;
+      depthSum += d; depthN++;
+      if (depthMin == null || d < depthMin) { depthMin = d; depthMinPt = pt; }
+    }
+    const avgDepth = depthN > 0 ? (depthSum / depthN) : null;
+
+    const stats = [
+      `<div class="hm-summary-stat"><span>Entered</span><span class="v">${entered.length}/35</span></div>`,
+      skipped.length ? `<div class="hm-summary-stat"><span>Skipped</span><span class="v">${skipped.length} (${skipped.join(", ")})</span></div>` : "",
+      untouched.length ? `<div class="hm-summary-stat${untouched.length > 0 ? " warn" : ""}"><span>Untouched</span><span class="v">${untouched.length}${untouched.length <= 8 ? " (" + untouched.join(", ") + ")" : ""}</span></div>` : "",
+      avgDepth != null ? `<div class="hm-summary-stat"><span>Avg depth</span><span class="v">${avgDepth.toFixed(2)}"</span></div>` : "",
+      depthMin != null ? `<div class="hm-summary-stat"><span>Thinnest</span><span class="v">pt ${depthMinPt} · ${depthMin.toFixed(2)}"</span></div>` : "",
+      flagged.length ? `<div class="hm-summary-stat danger"><span>⚠ Anomaly flags</span><span class="v">${flagged.length}</span></div>` : "",
+    ].filter(Boolean).join("");
+
+    const flagsList = flagged.length
+      ? `<div class="hm-summary-flags">${flagged.map(f => {
+          const arrow = f.flag.z < 0 ? "↓" : "↑";
+          return `<div class="row${f.flag.level === "danger" ? " danger" : ""}"><span>pt ${f.pt}</span><span>${f.depth.toFixed(2)}" · ${arrow} ${Math.abs(f.flag.z).toFixed(1)}σ vs ${f.flag.mean.toFixed(2)}"</span></div>`;
+        }).join("")}</div>`
+      : "";
+
+    body.innerHTML = stats + flagsList;
+  }
+
+  async function commitSession() {
+    const entries = [];
+    for (const [pt, e] of entry.entries) {
+      if (e.skipped) continue;
+      if (e.depth_in == null && e.temp_f == null) continue;
+      entries.push({ point_nbr: pt, depth_in: e.depth_in ?? null, temp_f: e.temp_f ?? null });
+    }
+    if (entries.length === 0) return { ok: false, reason: "nothing to save" };
+
+    const payload = { rink_code: entry.rinkCode, date: entry.date, entries };
     const record = await enqueue({ endpoint: "/api/measurements", method: "POST", body: payload });
     try {
       const r = await apiFetch("/api/measurements", {
@@ -879,26 +1224,163 @@ export async function init(shellCtx) {
       }
       const out = await r.json();
       await dequeue(record.idempotency_key);
-      $("#entry-status").textContent = `✓ saved ${out.written} reading${out.written === 1 ? "" : "s"} for ${date}`;
-      $("#entry-status").className = "hm-entry-status ok";
-      await refreshDates();
-      if (state.date === date) await loadDate();
-      render();
-      setTimeout(() => $("#entry-dialog").close(), 800);
+      return { ok: true, written: out.written };
     } catch (err) {
       if ("serviceWorker" in navigator && "SyncManager" in window) {
         try {
           const reg = await navigator.serviceWorker.ready;
           await reg.sync.register("drain-outbox");
-        } catch { /* not fatal */ }
+        } catch {}
       }
-      $("#entry-status").textContent = `queued — will sync when network returns (${err.message})`;
-      $("#entry-status").className = "hm-entry-status err";
-      setTimeout(() => $("#entry-dialog").close(), 1400);
+      return { ok: false, queued: true, reason: err.message };
     } finally {
-      btn.disabled = false; btn.textContent = "Save";
       updateQueuedBadge();
     }
+  }
+
+  // ───── start-session dialog ────────────────────────────────────────────
+  function openStartDialog(mode) {
+    const dlg = $("#start-session-dialog");
+    const dateInp = $("#start-session-date");
+    const orderSel = $("#start-session-order");
+    const status = $("#start-session-status");
+    const title = $("#start-session-title");
+    title.textContent = mode === "edit" ? "Edit Session" : "New Session";
+    dlg.dataset.mode = mode;
+    orderSel.value = entry.order || "serpentine";
+
+    if (mode === "edit") {
+      // Default to current viewing date — that's what they probably want to edit
+      dateInp.value = state.date ?? todayISO();
+    } else {
+      dateInp.value = todayISO();
+    }
+    validateStartDate();
+    dlg.showModal();
+    setTimeout(() => dateInp.focus(), 50);
+
+    function validateStartDate() {
+      const d = dateInp.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        status.textContent = "pick a valid date";
+        status.className = "hm-start-status err";
+        $("#start-session-go").disabled = true;
+        return;
+      }
+      const existing = state.dates.find(x => x.measure_date === d);
+      if (mode === "new") {
+        if (existing) {
+          status.textContent = `⚠ ${d} already has ${existing.depth_count} reading${existing.depth_count === 1 ? "" : "s"} — switch to Edit instead, or pick a different date.`;
+          status.className = "hm-start-status err";
+          $("#start-session-go").disabled = true;
+        } else {
+          status.textContent = `fresh session — no readings yet for ${d}.`;
+          status.className = "hm-start-status ok";
+          $("#start-session-go").disabled = false;
+        }
+      } else {
+        if (!existing) {
+          status.textContent = `no readings on ${d} yet — start a New Session instead.`;
+          status.className = "hm-start-status warn";
+          $("#start-session-go").disabled = true;
+        } else {
+          status.textContent = `editing ${existing.depth_count}/35 existing depths on ${d}.`;
+          status.className = "hm-start-status";
+          $("#start-session-go").disabled = false;
+        }
+      }
+    }
+    dateInp.oninput = validateStartDate;
+  }
+
+  async function handleStartSession(e) {
+    e.preventDefault();
+    const mode = $("#start-session-dialog").dataset.mode || "new";
+    const date = $("#start-session-date").value;
+    const order = $("#start-session-order").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    $("#start-session-dialog").close();
+
+    // Check for existing draft on this date
+    const draft = readDraft(state.rinkCode, date);
+    if (draft && draft.entries && Object.keys(draft.entries).length > 0) {
+      const summary = $("#draft-restore-summary");
+      const ents = Object.entries(draft.entries);
+      const filled = ents.filter(([_, v]) => !v.skipped && (v.depth_in != null || v.temp_f != null)).length;
+      const skip = ents.filter(([_, v]) => v.skipped).length;
+      const ts = new Date(draft.savedAt).toLocaleString();
+      summary.innerHTML = `Found a draft for <strong>${date}</strong> from ${ts} — ${filled} entered${skip ? `, ${skip} skipped` : ""}. Resume it or discard?`;
+      $("#draft-restore-dialog").showModal();
+      $("#draft-restore-dialog").dataset.date = date;
+      $("#draft-restore-dialog").dataset.mode = mode;
+      $("#draft-restore-dialog").dataset.order = order;
+      return;
+    }
+
+    await startEntryMode({ date, mode, order });
+  }
+
+  // Toggle order mid-session — preserves the current point so user keeps context
+  function toggleEntryOrder() {
+    const currentPt = entry.orderList[entry.idx];
+    entry.order = entry.order === "serpentine" ? "numeric" : "serpentine";
+    entry.orderList = entry.order === "serpentine" ? serpentineOrder() : numericOrder();
+    const newIdx = entry.orderList.indexOf(currentPt);
+    entry.idx = newIdx >= 0 ? newIdx : 0;
+    persistDraft();
+    renderEntryCanvas();
+    renderEntrySheet();
+  }
+
+  // Live anomaly redraw on input — keeps inline flag and canvas color in sync
+  function onEntryFieldInput() {
+    // Snapshot current input as a tentative value for flag/delta calc
+    const pt = entry.orderList[entry.idx];
+    if (pt == null) return;
+    const dv = $("#entry-depth").value.trim();
+    const tv = $("#entry-temp").value.trim();
+    const tentative = {};
+    if (dv) {
+      const n = Number(dv);
+      if (Number.isFinite(n) && n >= 0 && n <= 24) tentative.depth_in = n;
+    }
+    if (tv) {
+      const n = Number(tv);
+      if (Number.isFinite(n) && n >= -40 && n <= 100) tentative.temp_f = n;
+    }
+    const prev = entry.entries.get(pt) ?? {};
+    if (tentative.depth_in != null || tentative.temp_f != null) {
+      entry.entries.set(pt, { ...prev, ...tentative, skipped: false });
+    } else if (!prev.skipped) {
+      entry.entries.delete(pt);
+    }
+    persistDraft();
+    renderEntryCanvas();
+
+    // Update hint + flag without re-rendering whole sheet (would steal focus)
+    const b = entry.baseline.get(pt);
+    const dHint = $("#entry-depth-hint");
+    if (b?.last != null) {
+      let extra = "";
+      if (tentative.depth_in != null) {
+        const delta = tentative.depth_in - b.last;
+        const sign = delta >= 0 ? "+" : "";
+        const cls = Math.abs(delta) >= 0.5 ? "flag" : delta >= 0 ? "up" : "down";
+        extra = ` <span class="delta ${cls}">${sign}${delta.toFixed(2)}"</span>`;
+      }
+      dHint.innerHTML = `last: ${b.last.toFixed(2)}" (${b.last_date})${extra}`;
+    }
+    const flagBox = $("#entry-flag");
+    const flag = flagFor(pt, tentative.depth_in);
+    if (flag) {
+      flagBox.hidden = false;
+      flagBox.className = `hm-entry-flag${flag.level === "danger" ? " danger" : ""}`;
+      const arrow = flag.z < 0 ? "↓" : "↑";
+      flagBox.innerHTML = `<strong>${arrow} ${Math.abs(flag.z).toFixed(1)}σ off baseline</strong> — trailing-30 mean ${flag.mean.toFixed(2)}", last ${flag.last?.toFixed(2) ?? "—"}". Double-check the reading.`;
+    } else {
+      flagBox.hidden = true;
+    }
+    $("#entry-progress").textContent = `${entryEffectiveCount()}/35`;
   }
 
   async function updateQueuedBadge() {
@@ -1077,12 +1559,112 @@ export async function init(shellCtx) {
     render();
   });
 
-  // Entry form
-  $("#entry-btn").addEventListener("click", () => openEntry(state.date));
-  $("#entry-cancel").addEventListener("click", () => $("#entry-dialog").close());
-  $("#entry-form").addEventListener("submit", saveEntry);
-  $("#entry-fill-now").addEventListener("click", fillFromLatest);
-  $("#entry-date").addEventListener("change", e => loadEntryFor(e.target.value));
+  // Entry — two paths: New Session (fresh date, blank entries) or Edit (existing date)
+  $("#new-session-btn").addEventListener("click", () => openStartDialog("new"));
+  $("#edit-session-btn").addEventListener("click", () => openStartDialog("edit"));
+  $("#start-session-cancel").addEventListener("click", () => $("#start-session-dialog").close());
+  $("#start-session-cancel-2").addEventListener("click", () => $("#start-session-dialog").close());
+  $("#start-session-form").addEventListener("submit", handleStartSession);
+
+  // Draft restore
+  $("#draft-restore-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const dlg = $("#draft-restore-dialog");
+    const date = dlg.dataset.date;
+    const mode = dlg.dataset.mode || "new";
+    const order = dlg.dataset.order || "serpentine";
+    const draft = readDraft(state.rinkCode, date);
+    dlg.close();
+    if (!draft) return;
+    await startEntryMode({
+      date, mode: draft.mode || mode, order: draft.order || order,
+      restoreEntries: draft.entries, restoreIdx: draft.idx ?? 0,
+    });
+  });
+  $("#draft-discard").addEventListener("click", async () => {
+    const dlg = $("#draft-restore-dialog");
+    const date = dlg.dataset.date;
+    const mode = dlg.dataset.mode || "new";
+    const order = dlg.dataset.order || "serpentine";
+    clearDraft(state.rinkCode, date);
+    dlg.close();
+    await startEntryMode({ date, mode, order });
+  });
+
+  // Entry-mode interactions
+  $("#entry-exit").addEventListener("click", () => {
+    commitCurrent({ silent: true });
+    persistDraft();
+    exitEntryMode();
+  });
+  $("#entry-prev").addEventListener("click", prevPoint);
+  $("#entry-next").addEventListener("click", nextPoint);
+  $("#entry-skip").addEventListener("click", skipCurrent);
+  $("#entry-clear").addEventListener("click", clearCurrent);
+  $("#entry-order-toggle").addEventListener("click", toggleEntryOrder);
+
+  // Live input — fires for both depth and temp
+  $("#entry-depth").addEventListener("input", onEntryFieldInput);
+  $("#entry-temp").addEventListener("input", onEntryFieldInput);
+  // Enter on depth advances to temp; enter on temp advances to next point
+  $("#entry-depth").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("#entry-temp").focus(); }
+  });
+  $("#entry-temp").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); nextPoint(); }
+  });
+  // Arrow keys for desktop power users — only when not focused on inputs
+  function onEntryKey(e) {
+    if (!entry.active) return;
+    if (e.target instanceof HTMLInputElement) return;
+    if (e.key === "ArrowRight") { e.preventDefault(); nextPoint(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); prevPoint(); }
+    else if (e.key === "Escape") { e.preventDefault(); $("#entry-exit").click(); }
+  }
+  document.addEventListener("keydown", onEntryKey);
+
+  // Tap a point on the entry canvas to jump cursor to it
+  entryCanvas?.addEventListener("click", (e) => {
+    const rect = entryCanvas.getBoundingClientRect();
+    const p = entryPointAtCanvasXY(e.clientX - rect.left, e.clientY - rect.top);
+    if (p) goToPoint(p.point_nbr);
+  });
+
+  // Save Session — show summary, then commit
+  $("#entry-finish").addEventListener("click", () => {
+    if (!commitCurrent()) return;
+    if (entryEffectiveCount() === 0) {
+      $("#entry-flag").innerHTML = `<strong>Nothing to save</strong> — enter at least one point first.`;
+      $("#entry-flag").className = "hm-entry-flag";
+      $("#entry-flag").hidden = false;
+      return;
+    }
+    renderSummary();
+    $("#entry-summary-dialog").showModal();
+  });
+  $("#entry-summary-back").addEventListener("click", () => $("#entry-summary-dialog").close());
+  $("#entry-summary-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#entry-summary-confirm");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const result = await commitSession();
+    btn.disabled = false; btn.textContent = "Save Session";
+    $("#entry-summary-dialog").close();
+    if (result.ok) {
+      exitEntryMode({ saved: true });
+      await refreshDates();
+      // Jump heatmap to the date we just saved
+      state.date = entry.date;
+      $("#date-picker").value = entry.date;
+      await loadDate();
+      render();
+    } else if (result.queued) {
+      // Keep the draft as a safety net until SW drains
+      $("#entry-flag").innerHTML = `<strong>Queued offline</strong> — will sync when network returns. Draft kept.`;
+      $("#entry-flag").className = "hm-entry-flag";
+      $("#entry-flag").hidden = false;
+    }
+  });
 
   // Window-level listeners
   window.addEventListener("online", onOnline);
@@ -1100,6 +1682,10 @@ export async function init(shellCtx) {
   // Teardown — called by router when user navigates away
   return () => {
     resizeRO.disconnect();
+    if (entryResizeRO) { entryResizeRO.disconnect(); entryResizeRO = null; }
+    stopEntryAnim();
+    if (entry.active) { commitCurrent({ silent: true }); persistDraft(); exitEntryMode(); }
+    document.removeEventListener("keydown", onEntryKey);
     unlockBodyScroll(); // release if user navigates away with sheet open
     window.removeEventListener("online", onOnline);
     document.removeEventListener("visibilitychange", onVisibility);

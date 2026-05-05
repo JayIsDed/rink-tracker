@@ -18,9 +18,14 @@
 
     <span class="hm-queued-badge" id="queued-badge" hidden title="Entries waiting to sync"></span>
 
-    <button class="hm-entry-btn" id="entry-btn" type="button" title="Enter new measurements">
-      <span class="hm-entry-plus">+</span><span>Entry</span>
-    </button>
+    <div class="hm-entry-split">
+      <button class="hm-entry-btn primary" id="new-session-btn" type="button" title="Start a new measurement session for a fresh date">
+        <span class="hm-entry-plus">+</span><span>New Session</span>
+      </button>
+      <button class="hm-entry-btn ghost" id="edit-session-btn" type="button" title="Edit readings on an existing date">
+        <span>Edit</span>
+      </button>
+    </div>
   </div>
 
   <div class="hm-context" id="context-row" hidden>
@@ -64,25 +69,106 @@
     </aside>
   </div>
 
-  <dialog id="entry-dialog" class="hm-entry-dialog">
-    <form method="dialog" id="entry-form">
-      <header class="hm-entry-header">
-        <div class="hm-entry-title">
-          <span>Enter Readings</span>
-          <small id="entry-subtitle"></small>
-        </div>
-        <div class="hm-entry-controls">
-          <label class="ctl">
-            <span>Date</span>
-            <input type="date" id="entry-date" required>
-          </label>
-          <button type="button" class="btn-ghost" id="entry-fill-now">Fill from latest</button>
-          <button type="submit" class="btn-primary" id="entry-save">Save</button>
-          <button type="button" class="btn-ghost" id="entry-cancel">Cancel</button>
-        </div>
+  <!-- Compact start dialog: pick a date + intent before entering point-by-point mode -->
+  <dialog id="start-session-dialog" class="hm-start-dialog">
+    <form method="dialog" id="start-session-form">
+      <header class="hm-start-header">
+        <h3 id="start-session-title">New Session</h3>
+        <button type="button" class="btn-ghost" id="start-session-cancel" aria-label="Cancel">✕</button>
       </header>
-      <div class="hm-entry-status" id="entry-status"></div>
-      <div class="hm-entry-grid" id="entry-grid"></div>
+      <label class="ctl">
+        <span>Date</span>
+        <input type="date" id="start-session-date" required>
+      </label>
+      <label class="ctl">
+        <span>Order</span>
+        <select id="start-session-order">
+          <option value="serpentine" selected>Serpentine (recommended)</option>
+          <option value="numeric">Numeric (1 → 35)</option>
+        </select>
+      </label>
+      <div class="hm-start-status" id="start-session-status"></div>
+      <div class="hm-start-actions">
+        <button type="button" class="btn-ghost" id="start-session-cancel-2">Cancel</button>
+        <button type="submit" class="btn-primary" id="start-session-go">Begin</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Draft restore prompt -->
+  <dialog id="draft-restore-dialog" class="hm-start-dialog">
+    <form method="dialog" id="draft-restore-form">
+      <header class="hm-start-header">
+        <h3>Resume draft?</h3>
+      </header>
+      <p id="draft-restore-summary" class="hm-draft-summary"></p>
+      <div class="hm-start-actions">
+        <button type="button" class="btn-ghost" id="draft-discard">Discard</button>
+        <button type="submit" class="btn-primary" id="draft-resume">Resume</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Entry mode: full-screen takeover w/ rink + per-point sheet -->
+  <div class="hm-entry-mode" id="entry-mode" hidden>
+    <header class="hm-entry-bar">
+      <button type="button" class="btn-ghost" id="entry-exit" aria-label="Exit entry mode">✕</button>
+      <div class="hm-entry-meta">
+        <strong id="entry-mode-date"></strong>
+        <span class="hm-entry-mode-tag" id="entry-mode-tag"></span>
+      </div>
+      <div class="hm-entry-progress" id="entry-progress">0/35</div>
+      <button type="button" class="btn-ghost" id="entry-order-toggle" title="Toggle walking order">↻ Order</button>
+      <button type="button" class="btn-primary" id="entry-finish">Save Session</button>
+    </header>
+
+    <div class="hm-entry-stage">
+      <div class="hm-entry-canvas-wrap">
+        <canvas id="entry-rink"></canvas>
+      </div>
+
+      <aside class="hm-entry-sheet" id="entry-sheet">
+        <div class="hm-entry-sheet-head">
+          <button type="button" class="hm-entry-nav" id="entry-prev" aria-label="Previous point">◀</button>
+          <div class="hm-entry-pt">
+            <span class="hm-entry-pt-num" id="entry-pt-num">—</span>
+            <span class="hm-entry-pt-label" id="entry-pt-label">tap a point</span>
+          </div>
+          <button type="button" class="hm-entry-nav" id="entry-next" aria-label="Next point">▶</button>
+        </div>
+
+        <div class="hm-entry-fields" id="entry-fields" hidden>
+          <label class="hm-entry-field">
+            <span>Depth (in)</span>
+            <input type="text" inputmode="decimal" autocomplete="off" id="entry-depth" placeholder="—" pattern="[0-9]*\.?[0-9]*">
+            <small class="hm-entry-hint" id="entry-depth-hint"></small>
+          </label>
+          <label class="hm-entry-field">
+            <span>Temp (°F)</span>
+            <input type="text" inputmode="decimal" autocomplete="off" id="entry-temp" placeholder="—" pattern="-?[0-9]*\.?[0-9]*">
+            <small class="hm-entry-hint" id="entry-temp-hint"></small>
+          </label>
+          <div class="hm-entry-flag" id="entry-flag" hidden></div>
+          <div class="hm-entry-actions">
+            <button type="button" class="btn-ghost" id="entry-skip">Skip / mark unmeasurable</button>
+            <button type="button" class="btn-ghost" id="entry-clear">Clear</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- End-of-session summary -->
+  <dialog id="entry-summary-dialog" class="hm-summary-dialog">
+    <form method="dialog" id="entry-summary-form">
+      <header class="hm-start-header">
+        <h3>Review session</h3>
+      </header>
+      <div id="entry-summary-body"></div>
+      <div class="hm-start-actions">
+        <button type="button" class="btn-ghost" id="entry-summary-back">Back to entry</button>
+        <button type="submit" class="btn-primary" id="entry-summary-confirm">Save Session</button>
+      </div>
     </form>
   </dialog>
 </div>

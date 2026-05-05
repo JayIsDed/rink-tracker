@@ -14,7 +14,7 @@ import {
 } from "./auth";
 import {
   handleGetPoints, handleGetDates, handleGetMeasurements, handleGetTimeseries,
-  handleGetConcrete, handleGetStats, handleGetAnomalies,
+  handleGetConcrete, handleGetStats, handleGetAnomalies, handleGetBaseline,
   handleGetWeatherAll, handleGetWeatherByDate, handlePostMeasurements,
 } from "./routes/heatmap";
 import {
@@ -97,6 +97,7 @@ const server = Bun.serve({
     if (p === "/api/concrete-profile") return handleGetConcrete(url);
     if (p === "/api/stats") return handleGetStats(url);
     if (p === "/api/anomalies") return handleGetAnomalies(url);
+    if (p === "/api/baseline")  return handleGetBaseline(url);
     if (p === "/api/weather") return handleGetWeatherAll();
     if (p.startsWith("/api/weather/")) return handleGetWeatherByDate(p.split("/").pop() ?? "");
     if (p.startsWith("/api/timeseries/")) return handleGetTimeseries(url, p.split("/").pop() ?? "");
