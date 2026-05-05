@@ -423,10 +423,10 @@ export async function init(shellCtx) {
     }
 
     cx.fillStyle = "rgba(78, 197, 255, 0.6)";
-    cx.fillRect(...px(0, 30), 4, (RINK_H - 60) * scale);
+    cx.fillRect(...px(CORNER_R + 2, RINK_H), 14 * scale, -4);
     cx.fillStyle = "#aee7ff";
     cx.font = "9px system-ui"; cx.textAlign = "left";
-    cx.fillText("ZAM", ...px(2, 28));
+    cx.fillText("ZAM", ...px(CORNER_R + 4, RINK_H - 2));
 
     drawLegend();
   }
@@ -943,12 +943,12 @@ export async function init(shellCtx) {
       }
     }
 
-    // ZAM marker on the left edge — operator orientation cue (matches read mode)
-    entryCx.fillStyle = "rgba(78, 197, 255, 0.5)";
-    entryCx.fillRect(...px(0, 30), 4, (RINK_H - 60) * scale);
-    entryCx.fillStyle = "rgba(174, 231, 255, 0.6)";
+    // ZAM door — short bar on the bottom wall just past the lower-left corner curve
+    entryCx.fillStyle = "rgba(78, 197, 255, 0.55)";
+    entryCx.fillRect(...px(CORNER_R + 2, RINK_H), 14 * scale, -4);
+    entryCx.fillStyle = "rgba(174, 231, 255, 0.7)";
     entryCx.font = "9px system-ui"; entryCx.textAlign = "left";
-    entryCx.fillText("ZAM", ...px(2, 28));
+    entryCx.fillText("ZAM", ...px(CORNER_R + 4, RINK_H - 2));
 
     const currentPt = entry.orderList[entry.idx];
     for (const p of state.points) {
