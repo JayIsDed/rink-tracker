@@ -869,16 +869,86 @@ export async function init(shellCtx) {
     entryCx.stroke(outline);
 
     const px = ftToPx(scale);
-    // Subtle rink markings — minimal so the points stand out
-    entryCx.strokeStyle = "rgba(31, 85, 196, 0.5)"; entryCx.lineWidth = 1;
+    // Full rink markings — same anchors as read mode so operator recognizes
+    // landmarks (faceoff circles, goal creases, gridline ticks) while logging.
+    // Tinted slightly cooler/dimmer than read mode so the entry-state point
+    // dots remain dominant.
+    const RED  = "rgba(220, 60, 60, 0.7)";
+    const BLUE = "rgba(78, 130, 220, 0.7)";
+
+    // Blue lines + red center line (full-height strips)
+    entryCx.fillStyle = BLUE;
+    entryCx.fillRect(...px(MARK.blueLineLeft - 0.5, 0),  scale * 1, RINK_H * scale);
+    entryCx.fillRect(...px(MARK.blueLineRight - 0.5, 0), scale * 1, RINK_H * scale);
+    entryCx.fillStyle = RED;
+    entryCx.fillRect(...px(MARK.centerLine - 0.5, 0), scale * 1, RINK_H * scale);
+
+    // Goal lines (red, vertical, inset from corners)
+    entryCx.strokeStyle = RED; entryCx.lineWidth = 1.2;
     entryCx.beginPath();
-    entryCx.moveTo(...px(MARK.blueLineLeft, 0));  entryCx.lineTo(...px(MARK.blueLineLeft, RINK_H));
-    entryCx.moveTo(...px(MARK.blueLineRight, 0)); entryCx.lineTo(...px(MARK.blueLineRight, RINK_H));
+    entryCx.moveTo(...px(MARK.goalLineLeft,  MARK.goalLineMargin));
+    entryCx.lineTo(...px(MARK.goalLineLeft,  RINK_H - MARK.goalLineMargin));
+    entryCx.moveTo(...px(MARK.goalLineRight, MARK.goalLineMargin));
+    entryCx.lineTo(...px(MARK.goalLineRight, RINK_H - MARK.goalLineMargin));
     entryCx.stroke();
-    entryCx.strokeStyle = "rgba(204, 34, 34, 0.5)";
+
+    // Center circle + dot
+    entryCx.strokeStyle = BLUE; entryCx.lineWidth = 1.5;
     entryCx.beginPath();
-    entryCx.moveTo(...px(MARK.centerLine, 0)); entryCx.lineTo(...px(MARK.centerLine, RINK_H));
+    entryCx.arc(...px(MARK.centerLine, MARK.centerY), MARK.centerCircleR * scale, 0, Math.PI * 2);
     entryCx.stroke();
+    entryCx.fillStyle = BLUE;
+    entryCx.beginPath();
+    entryCx.arc(...px(MARK.centerLine, MARK.centerY), 1 * scale, 0, Math.PI * 2);
+    entryCx.fill();
+
+    // Faceoff circles + dots + cross-hash marks
+    for (const [x, y] of [
+      [MARK.faceoffDotXL, MARK.faceoffYTop], [MARK.faceoffDotXL, MARK.faceoffYBot],
+      [MARK.faceoffDotXR, MARK.faceoffYTop], [MARK.faceoffDotXR, MARK.faceoffYBot],
+    ]) {
+      entryCx.strokeStyle = RED; entryCx.lineWidth = 1.5;
+      entryCx.beginPath(); entryCx.arc(...px(x, y), MARK.faceoffR * scale, 0, Math.PI * 2); entryCx.stroke();
+      entryCx.fillStyle = RED;
+      entryCx.beginPath(); entryCx.arc(...px(x, y), 1 * scale, 0, Math.PI * 2); entryCx.fill();
+      entryCx.lineWidth = 1.2;
+      const r = MARK.faceoffR;
+      entryCx.beginPath();
+      entryCx.moveTo(...px(x - r - 1, y)); entryCx.lineTo(...px(x - r + 1, y));
+      entryCx.moveTo(...px(x + r - 1, y)); entryCx.lineTo(...px(x + r + 1, y));
+      entryCx.moveTo(...px(x, y - r - 1)); entryCx.lineTo(...px(x, y - r + 1));
+      entryCx.moveTo(...px(x, y + r - 1)); entryCx.lineTo(...px(x, y + r + 1));
+      entryCx.stroke();
+    }
+
+    // Goal creases (semi-circle into rink, light blue fill)
+    entryCx.fillStyle = "rgba(110, 180, 255, 0.18)";
+    entryCx.strokeStyle = BLUE; entryCx.lineWidth = 1.2;
+    for (const [gx, intoRink] of [[MARK.goalLineLeft, +1], [MARK.goalLineRight, -1]]) {
+      entryCx.beginPath();
+      if (intoRink > 0) entryCx.arc(...px(gx, MARK.centerY), MARK.goalCreaseR * scale, -Math.PI/2, Math.PI/2, false);
+      else              entryCx.arc(...px(gx, MARK.centerY), MARK.goalCreaseR * scale, -Math.PI/2, Math.PI/2, true);
+      entryCx.closePath(); entryCx.fill(); entryCx.stroke();
+    }
+
+    // Gridline tick marks at every measurement-point intersection — gives the
+    // visual scaffold the operator uses to find anchors when 35 dots aren't enough.
+    entryCx.strokeStyle = "rgba(255, 255, 255, 0.28)"; entryCx.lineWidth = 1;
+    const tickHalf = 3.5;
+    for (const tx of [MARK.goalLineLeft, MARK.blueLineLeft, MARK.centerLine, MARK.blueLineRight, MARK.goalLineRight]) {
+      for (const ty of Y_LINE) {
+        entryCx.beginPath();
+        entryCx.moveTo(...px(tx - tickHalf, ty)); entryCx.lineTo(...px(tx + tickHalf, ty));
+        entryCx.stroke();
+      }
+    }
+
+    // ZAM marker on the left edge — operator orientation cue (matches read mode)
+    entryCx.fillStyle = "rgba(78, 197, 255, 0.5)";
+    entryCx.fillRect(...px(0, 30), 4, (RINK_H - 60) * scale);
+    entryCx.fillStyle = "rgba(174, 231, 255, 0.6)";
+    entryCx.font = "9px system-ui"; entryCx.textAlign = "left";
+    entryCx.fillText("ZAM", ...px(2, 28));
 
     const currentPt = entry.orderList[entry.idx];
     for (const p of state.points) {
