@@ -98,6 +98,29 @@ export function colOf(nbr) {
 }
 
 /**
+ * The surveyed grid label for a point, matching the numbering carried in the
+ * `points` table — col = ceil(n/5), row = ((n-1) mod 5) + 1.
+ *
+ * Derived here rather than read from the database on purpose: the survey grid
+ * is a property of the sheet, not of the carried measurements, and reading it
+ * from a table means a fresh install answers "null" for a question geometry can
+ * always answer.
+ *
+ * MIND THE ROW DIRECTION. Row 1 is the BOTTOM of the sheet as drawn — point 1
+ * sits at Y_LINE[4] (y=86) and point 5 at Y_LINE[0] (y=14). That is the
+ * convention in fourteen months of carried data and round one printed it
+ * verbatim, so it is kept verbatim; a helpful renumbering here would silently
+ * disagree with every reading anyone has already written down.
+ *
+ * @returns {{col:number, row:number}|null} null when out of range
+ */
+export function gridOf(nbr) {
+  const n = Number(nbr);
+  if (!Number.isInteger(n) || n < 1 || n > POINT_COUNT) return null;
+  return { col: colOf(n), row: ((n - 1) % ROWS) + 1 };
+}
+
+/**
  * Walking order for entry mode. The operator walks the sheet column by column,
  * reversing direction each time, so the app should never ask them to teleport
  * from the top of one column back to the bottom of the next.

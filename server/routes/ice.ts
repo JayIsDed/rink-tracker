@@ -15,7 +15,7 @@
 // built on z-score alone would have missed the exact finding it was built for.
 
 import { db, json, bad, audit, replayed, remember, getSettingNum } from "../db";
-import { POINT_COUNT, nearestNeighbours } from "../../public/shared/lib/rink-geom.js";
+import { POINT_COUNT, nearestNeighbours, gridOf } from "../../public/shared/lib/rink-geom.js";
 import { mean, stdev, zScore, trendPerWeek } from "../../public/shared/lib/scales.js";
 
 // Only the Upper sheet is measured. Lower is a sand base and has never held a
@@ -93,6 +93,15 @@ const qHistory = db.query(`
   SELECT point_nbr, measure_date, depth_in FROM measurements
    WHERE rink_code = $rink AND measure_date >= $from AND depth_in IS NOT NULL
    ORDER BY point_nbr, measure_date
+`);
+
+// One point's readings up to and including a date. Everything the detail sheet
+// reports — the sparkline, the all-time stats, the headroom — is derived from
+// this one pull, so they cannot disagree with each other.
+const qPointHistory = db.query(`
+  SELECT measure_date, depth_in, temp_f FROM measurements
+   WHERE rink_code = $rink AND point_nbr = $point AND measure_date <= $date
+   ORDER BY measure_date
 `);
 
 const qUpsert = db.query(`
@@ -315,6 +324,104 @@ export function handleThinSpots(url: URL): Response {
       measured: readings.size,
     },
     spots,
+  });
+}
+
+/**
+ * One point, everything known about it. Round one had this and the rebuild did
+ * not: tapping a dot gave a single line of text instead of the point's history,
+ * which is what the composition check (AMENDMENT 1 on n-72) was called to fix.
+ *
+ * On the date window — every number here is computed from readings up to and
+ * including the session being viewed, never past it. Open a January session and
+ * "thinnest ever" means thinnest as of January. The alternative reads tidier
+ * and is a quiet lie: it would show a reading from the session's future and
+ * label it history. Viewing the latest session, which is the ordinary case,
+ * this IS all-time.
+ */
+export function handlePoint(url: URL): Response {
+  const rink = rinkParam(url);
+  const n = Number(url.searchParams.get("point"));
+  if (!Number.isInteger(n) || n < 1 || n > POINT_COUNT) return bad(`point must be 1..${POINT_COUNT}`);
+  if (rink !== MEASURED_RINK) {
+    return json({ rink_code: rink, measured: false, point_nbr: n, history: [], stats: null });
+  }
+
+  const asked = url.searchParams.get("date");
+  const date =
+    asked && DATE_RE.test(asked) ? asked : (qLatestDate.get({ $rink: rink })?.measure_date ?? null);
+  if (!date) {
+    return json({ rink_code: rink, measured: true, point_nbr: n, date: null, history: [], stats: null });
+  }
+
+  const rows = (qPointHistory.all({ $rink: rink, $point: n, $date: date }) as Row[]).map((r) => ({
+    measure_date: String(r.measure_date),
+    depth_in: (r.depth_in as number | null) ?? null,
+    temp_f: (r.temp_f as number | null) ?? null,
+  }));
+
+  const here = rows.find((r) => r.measure_date === date) ?? null;
+  // The reading before this session — the delta the operator actually asks for
+  // is "since last time", not "since some fixed point".
+  const earlier = rows.filter((r) => r.measure_date < date && r.depth_in != null);
+  const prev = earlier.length ? earlier[earlier.length - 1] : null;
+
+  const depths = rows.filter((r) => r.depth_in != null) as { measure_date: string; depth_in: number }[];
+  let stats = null;
+  if (depths.length) {
+    let minRow = depths[0];
+    let maxRow = depths[0];
+    for (const r of depths) {
+      if (r.depth_in < minRow.depth_in) minRow = r;
+      if (r.depth_in > maxRow.depth_in) maxRow = r;
+    }
+    stats = {
+      n: depths.length,
+      mean: mean(depths.map((r) => r.depth_in)),
+      min: minRow.depth_in,
+      min_date: minRow.measure_date,
+      max: maxRow.depth_in,
+      max_date: maxRow.measure_date,
+      trend_per_week:
+        depths.length >= MIN_TREND_SESSIONS
+          ? trendPerWeek(depths.map((r) => ({ date: r.measure_date, value: r.depth_in })))
+          : null,
+    };
+  }
+
+  // Headroom is the round-one idea, kept because it answers a real question
+  // before a cut: how much is there between today's surface and the thinnest
+  // this point has ever read, which is the best estimate anyone has of where
+  // the concrete starts. It is an ESTIMATE from measurement history, not a
+  // survey, and the sheet says so in words rather than implying precision.
+  const headroom =
+    here?.depth_in != null && stats != null ? Math.round((here.depth_in - stats.min) * 100) / 100 : null;
+
+  const near = nearestNeighbours(n, 4).map((nb: { point_nbr: number }) => nb.point_nbr);
+  const neighbourRows = (qReadings.all({ $rink: rink, $date: date }) as Row[])
+    .filter((r) => near.includes(Number(r.point_nbr)) && r.depth_in != null)
+    .map((r) => ({ point_nbr: Number(r.point_nbr), depth_in: Number(r.depth_in) }));
+
+  return json({
+    rink_code: rink,
+    measured: true,
+    point_nbr: n,
+    date,
+    grid: gridOf(n),
+    depth_in: here?.depth_in ?? null,
+    temp_f: here?.temp_f ?? null,
+    prev_date: prev?.measure_date ?? null,
+    prev_depth_in: prev?.depth_in ?? null,
+    delta_in:
+      here?.depth_in != null && prev?.depth_in != null
+        ? Math.round((here.depth_in - prev.depth_in) * 1000) / 1000
+        : null,
+    headroom_in: headroom,
+    threshold_in: getSettingNum("thin_spot_in"),
+    neighbours: neighbourRows,
+    stats,
+    weather: qWeather.get(date) ?? null,
+    history: rows,
   });
 }
 

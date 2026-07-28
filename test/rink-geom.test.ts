@@ -6,10 +6,51 @@ import {
   numericOrder,
   pointXY,
   colOf,
+  gridOf,
   nearestPoint,
   Y_LINE,
   MARK,
 } from "../public/shared/lib/rink-geom.js";
+
+describe("grid labels", () => {
+  test("matches the numbering carried in the points table", () => {
+    // Spot values read off the real carry: 1:c1r1, 5:c1r5, 6:c2r1, 35:c7r5.
+    expect(gridOf(1)).toEqual({ col: 1, row: 1 });
+    expect(gridOf(5)).toEqual({ col: 1, row: 5 });
+    expect(gridOf(6)).toEqual({ col: 2, row: 1 });
+    expect(gridOf(27)).toEqual({ col: 6, row: 2 });
+    expect(gridOf(35)).toEqual({ col: 7, row: 5 });
+  });
+
+  test("every point gets a label, and columns hold five rows each", () => {
+    const seen = new Set<string>();
+    for (let n = 1; n <= POINT_COUNT; n++) {
+      const g = gridOf(n)!;
+      expect(g.col).toBe(colOf(n));
+      expect(g.row).toBeGreaterThanOrEqual(1);
+      expect(g.row).toBeLessThanOrEqual(5);
+      seen.add(`${g.col}/${g.row}`);
+    }
+    expect(seen.size).toBe(POINT_COUNT);
+  });
+
+  test("ROW 1 IS THE BOTTOM OF THE SHEET — the carried convention, not a typo", () => {
+    // Point 1 sits at y=86 and point 5 at y=14, so row numbers run upward while
+    // screen y runs downward. Renumbering to match the screen would disagree
+    // with fourteen months of readings people have already written down.
+    expect(gridOf(1)!.row).toBe(1);
+    expect(pointXY(1)!.y).toBe(Y_LINE[4]);
+    expect(gridOf(5)!.row).toBe(5);
+    expect(pointXY(5)!.y).toBe(Y_LINE[0]);
+  });
+
+  test("out of range is null, not a computed nonsense cell", () => {
+    expect(gridOf(0)).toBeNull();
+    expect(gridOf(36)).toBeNull();
+    expect(gridOf(2.5)).toBeNull();
+    expect(gridOf("x" as never)).toBeNull();
+  });
+});
 
 describe("point map", () => {
   test("has all 35 points, exactly once", () => {

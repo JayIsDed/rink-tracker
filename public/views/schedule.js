@@ -244,17 +244,19 @@ function neighbourRow(slot, verb, ts, gapMins) {
       text: verb === "off at" ? "first on the sheet today" : "last cut of the day",
     });
   }
+  // Time and gap are SEPARATE fixed children, not one string. `.fixed` is
+  // `flex: 0 0 auto`, so a single span takes max-content and refuses to shrink
+  // — at the 206px split floor (~142px inside a card) one combined label runs
+  // straight past the right edge. Two short children wrap independently and
+  // each fits. Same failure the due-pill hit in R2.
   return el("div.row", { style: { marginTop: "var(--s1)" } }, [
     el("span.grow.truncate.dim", { style: { fontSize: "13px" }, text: slot.title }),
-    el("span.fixed.dim", {
-      style: { fontSize: "12px" },
-      // A gap worth mentioning is one the crew can feel. Anything under a few
-      // minutes is just the schedule abutting, which needs no commentary.
-      text:
-        gapMins != null && gapMins >= 5
-          ? `${verb} ${clock12(ts)} · ${gapWords(gapMins)}`
-          : `${verb} ${clock12(ts)}`,
-    }),
+    el("span.fixed.dim", { style: { fontSize: "12px" }, text: `${verb} ${clock12(ts)}` }),
+    // A gap worth mentioning is one the crew can feel. Anything under a few
+    // minutes is just the schedule abutting, which needs no commentary.
+    gapMins != null && gapMins >= 5
+      ? el("span.fixed.dim", { style: { fontSize: "12px", opacity: "0.75" }, text: gapWords(gapMins) })
+      : null,
   ]);
 }
 

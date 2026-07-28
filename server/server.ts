@@ -167,6 +167,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   if (path === "/api/ice/sessions" && method === "GET") return ice.handleSessions(url);
   if (path === "/api/ice/session" && method === "GET") return ice.handleSession(url);
   if (path === "/api/ice/thin-spots" && method === "GET") return ice.handleThinSpots(url);
+  if (path === "/api/ice/point" && method === "GET") return ice.handlePoint(url);
   if (path === "/api/ice/measurements" && method === "POST") return ice.handleWrite(req, actor);
 
   // ── Feed ──

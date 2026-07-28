@@ -15,6 +15,8 @@ import { RINK_W, RINK_H, POINT_XY, rinkOutlineCommands, nearestPoint } from "/sh
 import { rinkMarkings, heatCells, cellForWidth } from "/shared/lib/render.js";
 import { colorDepth, colorTemp, colorDelta, NO_DATA } from "/shared/lib/scales.js";
 import { createEntry, STATUS } from "/shared/lib/entry.js";
+import { sparklineWithThreshold } from "/shared/lib/spark.js";
+import { summarise, thermalLoad } from "/shared/lib/weather.js";
 import * as outbox from "/shared/outbox.js";
 
 // ── Canvas ────────────────────────────────────────────────────────────
@@ -176,6 +178,172 @@ function createSheetCanvas({ onTap, onResize } = {}) {
   };
 }
 
+// ── Point detail ──────────────────────────────────────────────────────
+// Tap a dot, get the point's story. Round one had this and the rebuild dropped
+// it silently — the gap that AMENDMENT 1 on n-72 was called to close.
+
+/** The sparkline, drawn from pure geometry. Depth only; temp is too noisy. */
+function sparkCanvas(history, threshold) {
+  const canvas = el("canvas", { style: { width: "100%", height: "64px", display: "block" } });
+
+  function paint() {
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width || 320;
+    const h = 64;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const cx = canvas.getContext("2d");
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, w, h);
+
+    const s = sparklineWithThreshold(
+      history.filter((r) => r.depth_in != null).map((r) => ({ date: r.measure_date, value: r.depth_in })),
+      { w, h, pad: 6 },
+      threshold
+    );
+    if (!s) return;
+
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim() || "#5cc8f5";
+    const red = css.getPropertyValue("--red").trim() || "#e25048";
+
+    if (s.baselineY != null) {
+      cx.strokeStyle = red;
+      cx.globalAlpha = 0.45;
+      cx.setLineDash([3, 3]);
+      cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(0, s.baselineY);
+      cx.lineTo(w, s.baselineY);
+      cx.stroke();
+      cx.setLineDash([]);
+      cx.globalAlpha = 1;
+    }
+
+    cx.strokeStyle = accent;
+    cx.lineWidth = 1.75;
+    cx.lineJoin = "round";
+    cx.beginPath();
+    s.points.forEach((p, i) => (i ? cx.lineTo(p.x, p.y) : cx.moveTo(p.x, p.y)));
+    cx.stroke();
+
+    // The latest reading gets a dot — on a 60-session line the right-hand end
+    // is the one anybody is actually looking for.
+    cx.fillStyle = accent;
+    cx.beginPath();
+    cx.arc(s.last.x, s.last.y, 3, 0, Math.PI * 2);
+    cx.fill();
+  }
+
+  requestAnimationFrame(paint);
+  return canvas;
+}
+
+async function openPointSheet(n, date) {
+  let d;
+  try {
+    d = await get(`/api/ice/point?rink=U&point=${n}&date=${date}`);
+  } catch (err) {
+    openSheet(`Point ${n}`, [empty("Couldn't load this point", err.message)]);
+    return;
+  }
+
+  const grid = d.grid ? `column ${d.grid.col}, row ${d.grid.row}` : `point ${n}`;
+  const thin = d.depth_in != null && d.threshold_in != null && d.depth_in <= d.threshold_in;
+  const nb = d.neighbours ?? [];
+  const nbMin = nb.length ? Math.min(...nb.map((x) => x.depth_in)) : null;
+  const nbMax = nb.length ? Math.max(...nb.map((x) => x.depth_in)) : null;
+
+  const chips = [
+    d.temp_f != null ? el("span.chip", { text: `${d.temp_f.toFixed(1)}°F` }) : null,
+    d.headroom_in != null
+      ? el("span.chip", {
+          style: d.headroom_in < 0.5 ? { color: "var(--amber)" } : {},
+          text: `${d.headroom_in.toFixed(2)}" over its thinnest`,
+        })
+      : null,
+    nbMin != null ? el("span.chip", { text: `neighbours ${nbMin.toFixed(1)}–${nbMax.toFixed(1)}"` }) : null,
+  ].filter(Boolean);
+
+  const w = d.weather;
+  const line = summarise(w);
+  const load = thermalLoad(w?.temp_mean_f, d.temp_f);
+
+  const stats = d.stats;
+  const recent = [...(d.history ?? [])].reverse().slice(0, 24);
+
+  openSheet(`Point ${n}`, [
+    el("p.dim", { style: { marginTop: 0, fontSize: "13px" }, text: grid }),
+
+    el("div.row", { style: { gap: "var(--s3)", alignItems: "baseline" } }, [
+      el("span.num", {
+        style: { fontSize: "34px", color: thin ? "var(--red)" : "var(--text)" },
+        text: d.depth_in == null ? "—" : `${d.depth_in.toFixed(2)}"`,
+      }),
+      d.delta_in != null
+        ? el("span.dim", {
+            style: { fontSize: "13px" },
+            text: `${d.delta_in > 0 ? "+" : ""}${d.delta_in.toFixed(2)}" since ${shortDate(Date.parse(d.prev_date + "T12:00:00"))}`,
+          })
+        : el("span.dim", { style: { fontSize: "13px" }, text: "no earlier reading" }),
+    ]),
+    d.depth_in == null ? el("p.muted.prose", { text: "Not measured in this session." }) : null,
+    chips.length ? el("div.row", { style: { gap: "var(--s2)", marginTop: "var(--s2)" } }, chips) : null,
+
+    // History
+    stats && stats.n >= 2
+      ? el("div", { style: { marginTop: "var(--s4)" } }, [
+          el("p.section-title", { text: `History · ${stats.n} readings` }),
+          sparkCanvas(d.history, d.threshold_in),
+          el("div.row", { style: { gap: "var(--s2)", marginTop: "var(--s2)" } }, [
+            el("span.chip", { text: `average ${stats.mean.toFixed(2)}"` }),
+            el("span.chip", { text: `thinnest ${stats.min.toFixed(2)}" · ${shortDate(Date.parse(stats.min_date + "T12:00:00"))}` }),
+            el("span.chip", { text: `thickest ${stats.max.toFixed(2)}"` }),
+            stats.trend_per_week != null
+              ? el("span.chip", {
+                  style: stats.trend_per_week <= -0.15 ? { color: "var(--amber)" } : {},
+                  text: `${stats.trend_per_week > 0 ? "+" : ""}${stats.trend_per_week.toFixed(2)}"/wk`,
+                })
+              : null,
+          ])
+        ])
+      : el("p.muted.prose", { style: { marginTop: "var(--s4)" }, text: "Not enough readings yet to show a trend." }),
+
+    // Weather
+    line
+      ? el("div", { style: { marginTop: "var(--s4)" } }, [
+          el("p.section-title", { text: "Outside that day" }),
+          el("p.muted.prose", { style: { marginTop: 0 }, text: line }),
+          load != null
+            ? el("p.dim", { style: { fontSize: "12px" }, text: `${load.toFixed(1)}°F between the air and this point.` })
+            : null,
+        ])
+      : null,
+
+    // Readings
+    recent.length
+      ? el("div", { style: { marginTop: "var(--s4)" } }, [
+          el("p.section-title", { text: "Readings" }),
+          ...recent.map((r) =>
+            el("div.row", { style: { marginTop: "var(--s1)", fontSize: "13px" } }, [
+              el("span.dim.grow", { text: shortDate(Date.parse(r.measure_date + "T12:00:00")) }),
+              el("span.num.fixed", { style: { minWidth: "56px", textAlign: "right" }, text: r.depth_in == null ? "—" : `${r.depth_in.toFixed(2)}"` }),
+              el("span.dim.fixed", { style: { minWidth: "58px", textAlign: "right" }, text: r.temp_f == null ? "" : `${r.temp_f.toFixed(1)}°F` }),
+            ])
+          ),
+        ])
+      : null,
+
+    d.headroom_in != null
+      ? el("p.dim", {
+          style: { fontSize: "12px", marginTop: "var(--s4)" },
+          text: "\"Over its thinnest\" compares today against the thinnest this point has ever read — the best estimate of where the concrete sits. It's history, not a survey.",
+        })
+      : null,
+  ]);
+}
+
 // Lower is a sand base — it has never held a measurement and has no surveyed
 // points. Saying so plainly beats rendering an empty sheet that looks broken.
 function notMeasured(navigate, setRink) {
@@ -214,7 +382,13 @@ async function mountRead({ root, state, navigate, setRink }) {
 
   const mapCard = el("div.card");
   const statsRow = el("div.row", { style: { gap: "var(--s2)" } });
-  const readout = el("div.dim", { style: { fontSize: "13px", minHeight: "18px", marginTop: "var(--s2)" } });
+  // A map you can tap looks exactly like a map you can't, so it has to say so.
+  // Round one wrote this on the sheet's peek handle; here it sits under the
+  // canvas as a permanent cue rather than a slot that fills in after the fact.
+  const readout = el("div.dim", {
+    style: { fontSize: "12px", minHeight: "18px", marginTop: "var(--s2)" },
+    text: "Tap any point for its history.",
+  });
   const stripCard = el("div.card");
 
   const sheet = createSheetCanvas({
@@ -222,15 +396,9 @@ async function mountRead({ root, state, navigate, setRink }) {
     // needs the view's repaint, not a redraw of the last cell grid.
     onResize: () => paint(),
     onTap: (n) => {
-      const p = session?.points.find((x) => x.point_nbr === n);
-      if (!p) return;
+      if (!session?.date) return;
       tick();
-      readout.textContent =
-        p.depth_in == null
-          ? `Point ${n} — not measured this session`
-          : `Point ${n} — ${p.depth_in.toFixed(2)}" deep` +
-            (p.temp_f != null ? `, ${p.temp_f.toFixed(1)}°F` : "") +
-            (p.delta_in != null ? `, ${p.delta_in > 0 ? "+" : ""}${p.delta_in.toFixed(2)}" since ${shortDate(Date.parse(session.prev_date + "T12:00:00"))}` : "");
+      openPointSheet(n, session.date);
     },
   });
 
@@ -351,7 +519,6 @@ async function mountRead({ root, state, navigate, setRink }) {
 
   async function load(date) {
     session = await get(`/api/ice/session?rink=U${date ? `&date=${date}` : ""}`);
-    readout.textContent = "";
     if (!session.date) {
       clear(mapCard).append(
         empty("No measurements yet", "Walk the sheet once and the map fills in."),
