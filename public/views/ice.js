@@ -26,17 +26,19 @@ const MARK_COLOR = {
   "mark-faint": "rgba(150,180,210,0.30)",
 };
 
-function createSheetCanvas({ onTap } = {}) {
+function createSheetCanvas({ onTap, onResize } = {}) {
   const canvas = el("canvas", {
     style: { width: "100%", display: "block", touchAction: "manipulation", borderRadius: "var(--r-md)" },
   });
   let scale = 1;
   let cssW = 320;
+  let lastCssW = -1;
   let opts = null;
 
   function context() {
     const rect = canvas.getBoundingClientRect();
     cssW = rect.width || 320;
+    lastCssW = cssW;
     const cssH = (cssW * RINK_H) / RINK_W;
     canvas.style.height = `${cssH}px`;
     // Back the canvas at device resolution or the dots and the rink lines are
@@ -151,7 +153,27 @@ function createSheetCanvas({ onTap } = {}) {
     });
   }
 
-  return { canvas, draw, redraw: () => draw() };
+  /**
+   * Repaint only when the WIDTH actually changed.
+   *
+   * The sheet is width-driven — its height is derived from the 2:1 aspect — so
+   * a height-only viewport change needs no repaint. That matters because the
+   * mobile URL bar collapsing on scroll fires `resize`, and repainting here
+   * would re-run ~2,000 IDW samples and reset the backing store mid-scroll on
+   * every single scroll gesture. That is the canvas half of "borders shimmer".
+   */
+  function handleResize() {
+    const w = canvas.getBoundingClientRect().width || 0;
+    if (Math.abs(w - lastCssW) < 1) return;
+    (onResize ?? draw)();
+  }
+  window.addEventListener("resize", handleResize);
+
+  return {
+    canvas,
+    draw,
+    destroy: () => window.removeEventListener("resize", handleResize),
+  };
 }
 
 // Lower is a sand base — it has never held a measurement and has no surveyed
@@ -196,6 +218,9 @@ async function mountRead({ root, state, navigate, setRink }) {
   const stripCard = el("div.card");
 
   const sheet = createSheetCanvas({
+    // Read mode derives its cell size from the width, so a real width change
+    // needs the view's repaint, not a redraw of the last cell grid.
+    onResize: () => paint(),
     onTap: (n) => {
       const p = session?.points.find((x) => x.point_nbr === n);
       if (!p) return;
@@ -368,11 +393,8 @@ async function mountRead({ root, state, navigate, setRink }) {
 
   root.append(mapCard, stripCard);
   markModes();
-
-  const onResize = () => paint();
-  window.addEventListener("resize", onResize);
   await load(null);
-  return () => window.removeEventListener("resize", onResize);
+  return () => sheet.destroy();
 }
 
 // ── Entry ─────────────────────────────────────────────────────────────
@@ -436,6 +458,7 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
   const banner = el("div", { style: { display: "none" } });
 
   const sheet = createSheetCanvas({
+    onResize: () => paint(),
     onTap: (n) => {
       commit();
       session.jumpTo(n);
@@ -679,8 +702,6 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
     renderAll();
   });
   const offChange = outbox.onChange(renderBanner);
-  const onResize = () => paint();
-  window.addEventListener("resize", onResize);
 
   renderAll();
   requestAnimationFrame(paint);
@@ -690,7 +711,7 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
     commit();
     offSettled();
     offChange();
-    window.removeEventListener("resize", onResize);
+    sheet.destroy();
   };
 }
 
