@@ -2,7 +2,12 @@ node_modules/
 *.log
 .DS_Store
 
-# DB files — store in volume mount in production, not in git
+# DB files — store in volume mount in production, not in git.
+# Globbed at any depth: data/carry/ holds VACUUM INTO snapshots of prod during
+# the rebuild, and data/*.db alone would not have caught them.
+data/**/*.db
+data/**/*.db-shm
+data/**/*.db-wal
 data/*.db
 data/*.db-shm
 data/*.db-wal
