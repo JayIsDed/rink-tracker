@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:3739",
-  "routes": ["/", "/edger", "/maintenance", "/settings"],
+  "routes": ["/", "/ice", "/ice/entry", "/edger", "/maintenance", "/settings"],
   "storage": [{ "key": "rt:lastSeen", "value": 0 }],
   "ready": ["document.querySelector('#view')?.children.length > 0"],
   "main": ".view",

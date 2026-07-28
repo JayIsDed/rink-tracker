@@ -57,7 +57,7 @@ register({
       renderPropane(propaneWrap, overview.propane, state, reload);
       renderBoard(boardWrap, cards, state, reload);
       renderFeed(feedWrap, feed);
-      renderIce(iceWrap, sessions, navigate);
+      renderIce(iceWrap, sessions, navigate, Number(state.settings?.thin_spot_in ?? 2) || 2);
     };
 
     await reload();
@@ -523,7 +523,7 @@ function renderFeed(wrap, feed) {
   markSeen(feed.events[0].at);
 }
 
-function renderIce(wrap, sessions, navigate) {
+function renderIce(wrap, sessions, navigate, thinAt = 2) {
   clear(wrap).append(el("p.section-title", { text: "Ice" }));
   if (!sessions.length) {
     wrap.append(empty("No measurements yet", "Sessions logged on the Ice tab land here."));
@@ -531,13 +531,22 @@ function renderIce(wrap, sessions, navigate) {
   }
   for (const s of sessions) {
     wrap.append(
-      el("div.row", { style: { marginTop: "var(--s2)" } }, [
+      el("div.row", {
+        style: { marginTop: "var(--s2)", cursor: "pointer" },
+        role: "button",
+        tabindex: "0",
+        onclick: () => navigate(`/ice?date=${s.measure_date}`),
+        onkeydown: (e) => (e.key === "Enter" || e.key === " ") && navigate(`/ice?date=${s.measure_date}`),
+      }, [
         el("span.grow", {}, [
           el("div", { text: `${s.rink_code === "U" ? "Upper" : "Lower"} · ${s.measure_date}` }),
           el("div.dim", { style: { fontSize: "12px" }, text: `${s.depth_count} points measured` }),
         ]),
         el("span.num.fixed", {
-          style: { color: s.min_depth != null && s.min_depth < 2 ? "var(--red)" : "var(--text-2)" },
+          // Threshold comes from settings, not a literal — the same number the
+          // Ice surface calls thin has to be the number this strip reddens on,
+          // or the front page and the detail screen disagree in front of the GM.
+          style: { color: s.min_depth != null && s.min_depth <= thinAt ? "var(--red)" : "var(--text-2)" },
           text: s.min_depth != null ? `min ${s.min_depth.toFixed(2)}"` : "—",
         }),
       ])

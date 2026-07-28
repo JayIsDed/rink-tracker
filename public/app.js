@@ -8,6 +8,7 @@ import * as views from "/shared/views.js";
 // Registering a view is what puts it in the dock. Add the import when the
 // surface ships — never before.
 import "/views/home.js";
+import "/views/ice.js";
 import "/views/edger.js";
 import "/views/maintenance.js";
 import "/views/settings.js";
@@ -93,7 +94,21 @@ async function render() {
   renderDock(v);
 
   try {
-    cleanup = (await v.mount({ root: viewEl, url, state, navigate, refresh: refreshBootstrap })) ?? null;
+    cleanup =
+      (await v.mount({
+        root: viewEl,
+        url,
+        state,
+        navigate,
+        refresh: refreshBootstrap,
+        // Views that are rink-specific need to be able to move the switcher, not
+        // just read it — the Ice surface offers "show the Upper rink" because it
+        // has nothing to draw for Lower.
+        setRink: (code) => {
+          setRink(code);
+          render();
+        },
+      })) ?? null;
   } catch (err) {
     console.error("[shell] view failed", v.id, err);
     clear(viewEl).append(
