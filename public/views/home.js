@@ -532,7 +532,10 @@ function renderIce(wrap, sessions, navigate, thinAt = 2) {
   for (const s of sessions) {
     wrap.append(
       el("div.row", {
-        style: { marginTop: "var(--s2)", cursor: "pointer" },
+        // Making the row tappable is what put it under the 44px cold-hands
+        // floor — it measured 39px as a plain readout, which was fine when it
+        // was not a target.
+        style: { marginTop: "var(--s2)", cursor: "pointer", minHeight: "44px" },
         role: "button",
         tabindex: "0",
         onclick: () => navigate(`/ice?date=${s.measure_date}`),

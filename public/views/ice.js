@@ -14,7 +14,7 @@ import { isoDate, shortDate } from "/shared/lib/dates.js";
 import { RINK_W, RINK_H, POINT_XY, rinkOutlineCommands, nearestPoint } from "/shared/lib/rink-geom.js";
 import { rinkMarkings, heatCells, cellForWidth } from "/shared/lib/render.js";
 import { colorDepth, colorTemp, colorDelta, NO_DATA } from "/shared/lib/scales.js";
-import { createEntry, STATUS, validateDepth, validateTemp } from "/shared/lib/entry.js";
+import { createEntry, STATUS } from "/shared/lib/entry.js";
 import * as outbox from "/shared/outbox.js";
 
 // ── Canvas ────────────────────────────────────────────────────────────
@@ -234,7 +234,9 @@ async function mountRead({ root, state, navigate, setRink }) {
     const byPoint = new Map(samples.map((s) => [s.point_nbr, s.value]));
     const cell = cellForWidth(sheet.canvas.getBoundingClientRect().width || 360);
     sheet.draw({
-      cells: heatCells(samples, { cell }).map((c) => ({ ...c, color: mode.color(c.v) })),
+      // "cover" because the painter clips to the outline — a centre-tested grid
+      // leaves a staircase along the boards that the clip cannot fill back in.
+      cells: heatCells(samples, { cell, edge: "cover" }).map((c) => ({ ...c, color: mode.color(c.v) })),
       colorOf: (n) => (byPoint.get(n) == null ? NO_DATA : mode.color(byPoint.get(n))),
       labelOf: (n) => {
         const v = byPoint.get(n);
@@ -376,7 +378,10 @@ async function mountRead({ root, state, navigate, setRink }) {
 // ── Entry ─────────────────────────────────────────────────────────────
 
 const STATUS_COLOR = {
-  [STATUS.EMPTY]: NO_DATA,
+  // Not NO_DATA. On the read map an unmeasured point is background, but here
+  // the dots ARE the progress display and the jump targets — at 0/35 the whole
+  // sheet is "empty", and a barely-visible dot is one you cannot aim at.
+  [STATUS.EMPTY]: "var(--text-3)",
   [STATUS.DIRTY]: "var(--amber)",
   [STATUS.QUEUED]: "var(--amber)",
   [STATUS.SAVED]: "var(--green)",
@@ -506,7 +511,8 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
     const pos = session.position();
     const p = session.progress();
     pointTitle.textContent = `Point ${n}`;
-    pointNote.textContent = `${pos.index + 1} of ${pos.total} in walking order`;
+    // Short enough not to wrap mid-phrase beside the chips on a 412px phone.
+    pointNote.textContent = `${pos.index + 1} of ${pos.total} · walk order`;
     progressChip.textContent = `${p.measured}/35 measured`;
     savedChip.textContent = p.failed
       ? `${p.failed} failed`

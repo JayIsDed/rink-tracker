@@ -124,6 +124,29 @@ describe("heat grid", () => {
     expect(cells.length).toBeLessThan(full);
   });
 
+  test("cover mode paints past the boards so a clip has something to trim", () => {
+    // A centre-tested grid under a clip leaves a visible staircase along the
+    // boards, because a clip can only cut away — it cannot fill in a cell that
+    // was never painted.
+    const centre = heatCells(samples, { cell: 4, edge: "centre" });
+    const cover = heatCells(samples, { cell: 4, edge: "cover" });
+    expect(cover.length).toBeGreaterThan(centre.length);
+    // Every centre-qualifying cell is still there; cover only ever adds.
+    const key = (c: any) => `${c.x},${c.y}`;
+    const covered = new Set(cover.map(key));
+    for (const c of centre) expect(covered.has(key(c))).toBe(true);
+  });
+
+  test("cover mode still stops at the bounding box, not the whole canvas", () => {
+    const cover = heatCells(samples, { cell: 4, edge: "cover" });
+    for (const c of cover) {
+      expect(c.x).toBeGreaterThanOrEqual(0);
+      expect(c.y).toBeGreaterThanOrEqual(0);
+      expect(c.x).toBeLessThan(RINK_W);
+      expect(c.y).toBeLessThan(RINK_H);
+    }
+  });
+
   test("a uniform field reads uniform", () => {
     for (const c of heatCells(samples, { cell: 4 })) expect(c.v).toBeCloseTo(3, 6);
   });

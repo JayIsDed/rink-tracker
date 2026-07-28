@@ -130,16 +130,26 @@ export function rinkMarkings() {
 }
 
 /**
- * The interpolated field, as a grid of cells to fill. Only cells whose centre
- * is on the ice are returned, so the caller can paint without clipping and the
- * heat never bleeds past the boards.
+ * The interpolated field, as a grid of cells to fill.
+ *
+ * `edge` decides what happens at the boards:
+ *   "centre" — keep a cell only if its CENTRE is on the ice. Correct when the
+ *              caller paints without clipping.
+ *   "cover"  — keep any cell that overlaps the ice at all. Correct when the
+ *              caller clips to the rink outline, which is the usual case.
+ *
+ * The default is "centre" and it is the wrong choice for a clipped canvas: the
+ * clip can only cut away, it cannot fill in what was never painted, so a
+ * centre-tested grid leaves a visible staircase along the boards and around the
+ * 28ft corners. "cover" paints past the edge and lets the clip do the shaping.
  *
  * @param {Array<{point_nbr:number, value:number}>} samples
  * @param {object} [opts]
  * @param {number} [opts.cell=2]  cell size in FEET
+ * @param {"centre"|"cover"} [opts.edge="centre"]
  * @returns {Array<{x:number,y:number,w:number,h:number,v:number,conf:number}>}
  */
-export function heatCells(samples, { cell = 2 } = {}) {
+export function heatCells(samples, { cell = 2, edge = "centre" } = {}) {
   const out = [];
   if (!samples || samples.length === 0) return out;
   // Bail before the grid loop if nothing has a value — fieldAt would return
@@ -151,13 +161,27 @@ export function heatCells(samples, { cell = 2 } = {}) {
     for (let x = 0; x < RINK_W; x += size) {
       const cx = x + size / 2;
       const cy = y + size / 2;
-      if (!insideRink(cx, cy)) continue;
+      if (!overlapsRink(x, y, size, edge)) continue;
       const f = fieldAt(samples, cx, cy);
       if (!f) continue;
       out.push({ x, y, w: size, h: size, v: f.v, conf: f.conf });
     }
   }
   return out;
+}
+
+/** Does a cell qualify under the chosen edge rule? */
+function overlapsRink(x, y, size, edge) {
+  if (edge !== "cover") return insideRink(x + size / 2, y + size / 2);
+  // Any of the four corners or the centre landing on the ice is enough — the
+  // clip trims whatever hangs over.
+  return (
+    insideRink(x + size / 2, y + size / 2) ||
+    insideRink(x, y) ||
+    insideRink(x + size, y) ||
+    insideRink(x, y + size) ||
+    insideRink(x + size, y + size)
+  );
 }
 
 /**
