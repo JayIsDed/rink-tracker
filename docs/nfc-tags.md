@@ -6,8 +6,12 @@ iPhone and Android, no app install, no browser permission prompt, nothing to
 grant. The Web NFC API would have been Android-Chrome only and would have
 needed the app already open — the opposite of what a tag is for.
 
-Tag hardware: **NTAG213 or better**. The longest URL below is well under 100
-characters, so 144 bytes of user memory is ample.
+Tag hardware: **NTAG215 — confirmed in hand, 2026-07-28. No order needed.**
+215s carry 504 bytes of user memory against the longest URL below at ~60
+characters, so they are wildly oversized for this and that is fine. NTAG213
+(144 bytes) would also have been ample if more are ever needed.
+
+Six tags required, seven with the optional measurement-station one.
 
 ## The tags
 
