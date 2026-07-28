@@ -245,8 +245,15 @@ button, input, select, textarea {
   align-items: center;
   gap: var(--s3);
   min-width: 0;
+  /* The narrow floor is 206px (split-screen). Inside a card's padding that
+     leaves ~142px, which a label + status chip + action button cannot share on
+     one line — so the row wraps instead of pushing its tail past the edge. */
+  flex-wrap: wrap;
 }
-.row > .grow { flex: 1 1 auto; min-width: 0; }
+/* A basis rather than 0 is what actually triggers the wrap: with min-width:0
+   alone the grow child just shrinks to nothing and the fixed children stay put
+   and overflow. */
+.row > .grow { flex: 1 1 8rem; min-width: 0; }
 .row > .fixed { flex: 0 0 auto; }
 
 .truncate {
@@ -438,6 +445,10 @@ textarea.input { min-height: 88px; resize: vertical; }
   }
   .sheet.open { transform: translate(-50%, 0); }
   .prose { max-width: 68ch; }
+  /* Art reads this on a monitor. Sub-labels inside cards were running to 99ch
+     on the ultrawide profiles, which is well past comfortable measure — a
+     ceiling costs nothing on phones (they never get near it). */
+  .card p, .card .dim { max-width: 80ch; }
 }
 
 @media (min-width: 1500px) {

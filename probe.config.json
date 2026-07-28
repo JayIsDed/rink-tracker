@@ -1,6 +1,7 @@
 {
   "url": "http://localhost:3739",
-  "routes": ["/settings"],
+  "routes": ["/", "/edger", "/maintenance", "/settings"],
+  "storage": [{ "key": "rt:lastSeen", "value": 0 }],
   "ready": ["document.querySelector('#view')?.children.length > 0"],
   "main": ".view",
   "scroll": ".view",
@@ -8,7 +9,7 @@
   "tile": ".card",
   "metrics": ".num, .metric, [data-metric]",
   "tokens": "public/shared/theme.css",
-  "interactiveExtra": [".chip"],
+  "interactiveExtra": [],
   "sheet": {
     "trigger": "#who-btn",
     "panel": ".sheet",

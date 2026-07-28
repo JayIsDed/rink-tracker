@@ -7,6 +7,9 @@ import * as views from "/shared/views.js";
 
 // Registering a view is what puts it in the dock. Add the import when the
 // surface ships — never before.
+import "/views/home.js";
+import "/views/edger.js";
+import "/views/maintenance.js";
 import "/views/settings.js";
 
 export const state = {

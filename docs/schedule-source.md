@@ -24,13 +24,14 @@ prefer.
 
 ## What comes back
 
-Parsed 1,213 unique slots from the 2026-07-28 pull, spanning
-**2026-07-28 → 2026-08-26** (30 distinct days — a rolling ~30-day forward
-window).
+The shipping parser (`server/jobs/schedule-parse.ts`, run against the captured
+2026-07-28 payload) extracts **1,282 unique slots**, of which **1,224 sit on our
+two rinks** and **382 are ice cuts**. Zero rows fail to resolve a timestamp.
+Span is **2026-07-28 → 2026-08-26** — a rolling ~30-day forward window.
 
-The page header claims 1,308 events against our 1,213 parsed. The gap is not
-yet explained; the puller must log both numbers so a widening gap is visible
-rather than assumed benign.
+The page header claims 1,308 events against 1,282 parsed. The 26-row gap is not
+explained; it may be non-slot events. The puller logs both numbers every run so
+a *widening* gap becomes visible rather than being assumed benign.
 
 ### The space mapping is exact — this is the load-bearing find
 

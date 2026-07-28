@@ -16,6 +16,7 @@ import * as cards from "./routes/cards";
 import * as maintenance from "./routes/maintenance";
 import * as propane from "./routes/propane";
 import * as feed from "./routes/feed";
+import * as edger from "./routes/edger";
 
 const PORT = Number(process.env.PORT ?? 3739);
 const PUBLIC = new URL("../public/", import.meta.url).pathname;
@@ -154,6 +155,10 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (!action && method === "PATCH") return cards.handlePatch(req, id, actor, isAdmin);
     if (!action && method === "DELETE") return cards.handleDelete(id, actor, isAdmin);
   }
+
+  // ── Edger ──
+  if (path === "/api/edger" && method === "GET") return edger.handleList(url);
+  if (path === "/api/edger" && method === "POST") return edger.handleCreate(req, actor);
 
   // ── Feed ──
   if (path === "/api/feed" && method === "GET") return feed.handleFeed(url);
