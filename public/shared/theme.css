@@ -333,7 +333,15 @@ textarea.input { min-height: 88px; resize: vertical; }
   font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
+  /* nowrap alone is what pushed a long due-pill ("before the CHL tournament")
+     past the right edge on the 206px floor. The ellipsis quartet needs all
+     four declarations — nowrap, overflow, text-overflow and a shrinkable
+     min-width — plus a cap so the chip can never exceed its row. */
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chip.green { color: var(--green); border-color: rgba(67, 209, 158, 0.35); }
 .chip.amber { color: var(--amber); border-color: rgba(245, 181, 68, 0.4); }

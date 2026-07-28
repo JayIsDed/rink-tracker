@@ -103,12 +103,16 @@ let toastTimer = null;
 
 export function toast(message, tone = "") {
   if (!toastEl) {
+    // Anchored to the TOP, not above the dock. Bottom-anchored it landed
+    // squarely on a sheet's primary button — caught in the V2 deep-link run,
+    // where "Hi, <name>" covered "Log a swap now" at the exact moment the tag
+    // tap was supposed to pay off.
     toastEl = el("div", {
       style: {
         position: "fixed",
         left: "50%",
         transform: "translateX(-50%)",
-        bottom: "calc(var(--dock-h) + 24px + env(safe-area-inset-bottom))",
+        top: "calc(12px + env(safe-area-inset-top))",
         zIndex: "60",
         maxWidth: "min(92vw, 460px)",
         padding: "10px 16px",
