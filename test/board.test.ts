@@ -1,62 +1,21 @@
 // Behavioural tests over the R2 write paths, driven through the real HTTP
 // surface so routing, cookies and idempotency are exercised too.
 //
-// Each test gets its own temp database via RINK_DB, and the server module is
-// imported fresh per file.
+// The server runs as its own process with its own temp database — see
+// test/helpers/server.ts for why importing the module directly does not survive
+// a second test file doing the same.
 
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { startServer, type TestServer } from "./helpers/server";
 
-const dir = mkdtempSync(join(tmpdir(), "rink-board-"));
-process.env.RINK_DB = join(dir, "test.db");
-process.env.PORT = "0";
-process.env.RINK_ADMIN_PINS = "Boss:9999";
-
-let base: string;
-let server: { stop: (force?: boolean) => void; port: number };
-let whoCookie = "";
-let adminCookie = "";
+let srv: TestServer;
+const call = (path: string, init?: RequestInit) => srv.call(path, init);
 
 beforeAll(async () => {
-  ({ server } = await import("../server/server"));
-  base = `http://localhost:${server.port}`;
+  srv = await startServer("board");
 });
 
-afterAll(() => {
-  server?.stop(true);
-  rmSync(dir, { recursive: true, force: true });
-});
-
-function cookieHeader(): string {
-  return [whoCookie, adminCookie].filter(Boolean).join("; ");
-}
-
-async function call(path: string, init: RequestInit = {}) {
-  const res = await fetch(base + path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      cookie: cookieHeader(),
-      ...(init.headers ?? {}),
-    },
-  });
-  const setCookie = res.headers.get("set-cookie");
-  if (setCookie) {
-    const first = setCookie.split(";")[0];
-    if (first.startsWith("rt_who=")) whoCookie = first;
-    if (first.startsWith("rt_admin=")) adminCookie = first;
-  }
-  const text = await res.text();
-  let body: any = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
-  }
-  return { status: res.status, body, headers: res.headers };
-}
+afterAll(() => srv?.stop());
 
 describe("identity gate", () => {
   test("a nameless device cannot write", async () => {
@@ -232,11 +191,11 @@ describe("admin unlock", () => {
   });
 
   test("a tampered admin cookie is rejected", async () => {
-    const good = adminCookie;
-    adminCookie = good.replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
+    const good = srv.cookies;
+    srv.cookies = good.replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
     const b = await call("/api/bootstrap");
     expect(b.body.is_admin).toBe(false);
-    adminCookie = good;
+    srv.cookies = good;
   });
 });
 
