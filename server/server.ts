@@ -17,6 +17,7 @@ import * as maintenance from "./routes/maintenance";
 import * as propane from "./routes/propane";
 import * as feed from "./routes/feed";
 import * as edger from "./routes/edger";
+import * as ice from "./routes/ice";
 import { startScheduler, runMorningJobs } from "./jobs/scheduler";
 
 const PORT = Number(process.env.PORT ?? 3739);
@@ -161,6 +162,12 @@ async function api(req: Request, url: URL): Promise<Response> {
   // ── Edger ──
   if (path === "/api/edger" && method === "GET") return edger.handleList(url);
   if (path === "/api/edger" && method === "POST") return edger.handleCreate(req, actor);
+
+  // ── Ice ──
+  if (path === "/api/ice/sessions" && method === "GET") return ice.handleSessions(url);
+  if (path === "/api/ice/session" && method === "GET") return ice.handleSession(url);
+  if (path === "/api/ice/thin-spots" && method === "GET") return ice.handleThinSpots(url);
+  if (path === "/api/ice/measurements" && method === "POST") return ice.handleWrite(req, actor);
 
   // ── Feed ──
   if (path === "/api/feed" && method === "GET") return feed.handleFeed(url);
