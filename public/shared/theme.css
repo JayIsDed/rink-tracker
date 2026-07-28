@@ -463,6 +463,17 @@ textarea.input { min-height: 88px; resize: vertical; }
      on the ultrawide profiles, which is well past comfortable measure — a
      ceiling costs nothing on phones (they never get near it). */
   .card p, .card .dim { max-width: 80ch; }
+
+  /* The rule above misses a bare <div> carrying its own text, which is exactly
+     what the house builds inside a .grow column (ticker labels, card titles,
+     slot titles). Maintenance ran those to 137ch on every desktop profile with
+     inflated content — pre-existing, and on the one surface the GM reads. */
+  .card .grow > div { max-width: 80ch; }
+
+  /* Tighter than the rest on purpose: .section-title is uppercase with 0.8px
+     letter-spacing, and the CSS `ch` unit does not count letter-spacing, so an
+     80ch cap here still renders past 90 measured ch. */
+  .card .section-title { max-width: 68ch; }
 }
 
 @media (min-width: 1500px) {

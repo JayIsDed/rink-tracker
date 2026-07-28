@@ -64,6 +64,32 @@ export function colorDelta(v) {
   return ramp((v + 1) / 2, DELTA_STOPS);
 }
 
+// ── Legend ────────────────────────────────────────────────────────────
+// A colour ramp with no key is decoration. Round one drew a gradient bar with
+// its end labels under every mode; the rebuild shipped the ramps and dropped
+// the key, which leaves a stranger — the GM, on a desktop, cold — looking at a
+// blue-and-red picture with no way to learn what blue means.
+//
+// The domains live here beside the ramps that use them, so a scale and its
+// legend cannot drift apart.
+
+export const SCALES = {
+  depth: { label: "Depth", lo: `${DEPTH_MIN}"`, hi: `${DEPTH_MAX}"+`, stops: DEPTH_STOPS },
+  temp: { label: "Temperature", lo: "10°F", hi: "40°F", stops: TEMP_STOPS },
+  // Signed, so the middle of the bar is the meaningful landmark: no change.
+  change: { label: "Change since last session", lo: '−1"', hi: '+1"', mid: "no change", stops: DELTA_STOPS },
+};
+
+/**
+ * The ramp as a CSS `linear-gradient` colour list, sampled at its own stops so
+ * the bar shows the same colours the map does.
+ *
+ * @returns {string} e.g. "rgb(190,30,45) 0%, …, rgb(40,120,200) 100%"
+ */
+export function gradientStops(stops) {
+  return stops.map((s) => `rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]}) ${Math.round(s.t * 100)}%`).join(", ");
+}
+
 /**
  * Population standard deviation, guarded against the floating-point negative
  * that AVG(x²)−AVG(x)² produces when every sample is identical.

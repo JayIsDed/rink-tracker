@@ -13,7 +13,7 @@ import { el, clear, empty, toast, tick, openSheet, closeSheet } from "/shared/ui
 import { isoDate, shortDate } from "/shared/lib/dates.js";
 import { RINK_W, RINK_H, POINT_XY, rinkOutlineCommands, nearestPoint } from "/shared/lib/rink-geom.js";
 import { rinkMarkings, heatCells, cellForWidth } from "/shared/lib/render.js";
-import { colorDepth, colorTemp, colorDelta, NO_DATA } from "/shared/lib/scales.js";
+import { colorDepth, colorTemp, colorDelta, NO_DATA, SCALES, gradientStops } from "/shared/lib/scales.js";
 import { createEntry, STATUS } from "/shared/lib/entry.js";
 import { sparklineWithThreshold } from "/shared/lib/spark.js";
 import { summarise, thermalLoad } from "/shared/lib/weather.js";
@@ -76,9 +76,16 @@ function createSheetCanvas({ onTap, onResize } = {}) {
     cx.fillRect(0, 0, RINK_W * scale, RINK_H * scale);
     for (const c of cells) {
       cx.fillStyle = c.color;
+      // Fade with the interpolator's own confidence. `heatCells` has always
+      // returned a `conf` per cell and the view threw it away, so ice measured
+      // three feet from a probe and ice interpolated thirty feet from the
+      // nearest one were painted with identical certainty. Between the goal
+      // line and the boards that is a claim nobody took a reading to support.
+      cx.globalAlpha = c.alpha ?? 1;
       // +1px bleed so the grid does not show hairline seams at fractional scale.
       cx.fillRect(c.x * scale, c.y * scale, c.w * scale + 1, c.h * scale + 1);
     }
+    cx.globalAlpha = 1;
     cx.restore();
 
     for (const s of rinkMarkings()) {
@@ -381,6 +388,7 @@ async function mountRead({ root, state, navigate, setRink }) {
   let sessions = [];
 
   const mapCard = el("div.card");
+  const legend = el("div", { style: { marginTop: "var(--s2)" } });
   const statsRow = el("div.row", { style: { gap: "var(--s2)" } });
   // A map you can tap looks exactly like a map you can't, so it has to say so.
   // Round one wrote this on the sheet's peek handle; here it sits under the
@@ -412,6 +420,7 @@ async function mountRead({ root, state, navigate, setRink }) {
           mode = m;
           paint();
           markModes();
+          renderLegend();
         },
       })
     )
@@ -419,6 +428,28 @@ async function mountRead({ root, state, navigate, setRink }) {
 
   function markModes() {
     modeSwitch.querySelectorAll("button").forEach((b, i) => b.classList.toggle("primary", MODES[i].id === mode.id));
+  }
+
+  /** The key for whichever ramp is on screen. */
+  function renderLegend() {
+    const s = SCALES[mode.id];
+    clear(legend);
+    if (!s) return;
+    legend.append(
+      el("div", {
+        style: {
+          height: "8px",
+          borderRadius: "var(--r-full)",
+          border: "1px solid var(--border)",
+          background: `linear-gradient(90deg, ${gradientStops(s.stops)})`,
+        },
+      }),
+      el("div.row", { style: { marginTop: "var(--s1)", fontSize: "11px" } }, [
+        el("span.dim.fixed", { text: s.lo }),
+        el("span.dim.grow", { style: { textAlign: "center" }, text: s.mid ?? s.label }),
+        el("span.dim.fixed", { text: s.hi }),
+      ])
+    );
   }
 
   function paint() {
@@ -429,7 +460,11 @@ async function mountRead({ root, state, navigate, setRink }) {
     sheet.draw({
       // "cover" because the painter clips to the outline — a centre-tested grid
       // leaves a staircase along the boards that the clip cannot fill back in.
-      cells: heatCells(samples, { cell, edge: "cover" }).map((c) => ({ ...c, color: mode.color(c.v) })),
+      cells: heatCells(samples, { cell, edge: "cover" }).map((c) => ({
+        ...c,
+        color: mode.color(c.v),
+        alpha: c.conf,
+      })),
       colorOf: (n) => (byPoint.get(n) == null ? NO_DATA : mode.color(byPoint.get(n))),
       labelOf: (n) => {
         const v = byPoint.get(n);
@@ -551,6 +586,7 @@ async function mountRead({ root, state, navigate, setRink }) {
     ]),
     el("div", { style: { marginTop: "var(--s3)" } }, [modeSwitch]),
     el("div", { style: { marginTop: "var(--s3)" } }, [sheet.canvas]),
+    legend,
     readout,
     el("div", { style: { marginTop: "var(--s3)" } }, [statsRow]),
     el("div.row", { style: { marginTop: "var(--s3)" } }, [
@@ -560,6 +596,7 @@ async function mountRead({ root, state, navigate, setRink }) {
 
   root.append(mapCard, stripCard);
   markModes();
+  renderLegend();
   await load(null);
   return () => sheet.destroy();
 }

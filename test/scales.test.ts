@@ -2,8 +2,12 @@ import { expect, test, describe } from "bun:test";
 import {
   ramp,
   colorDepth,
+  colorTemp,
   colorDelta,
   NO_DATA,
+  DEPTH_MIN,
+  SCALES,
+  gradientStops,
   stdev,
   mean,
   zScore,
@@ -130,5 +134,36 @@ describe("trendPerWeek", () => {
       { date: "2025-12-01", value: 4.0 },
     ])!;
     expect(grow).toBeGreaterThan(0);
+  });
+});
+
+describe("legend", () => {
+  test("every read mode has a key — a ramp without one is decoration", () => {
+    // The mode ids in views/ice.js. If a mode is added without a scale entry,
+    // its legend silently disappears, so this is the guard.
+    for (const id of ["depth", "temp", "change"]) {
+      expect(SCALES[id]).toBeDefined();
+      expect(SCALES[id].lo).toBeTruthy();
+      expect(SCALES[id].hi).toBeTruthy();
+      expect(SCALES[id].stops.length).toBeGreaterThan(1);
+    }
+  });
+
+  test("the gradient runs 0% to 100% in stop order", () => {
+    const css = gradientStops(SCALES.depth.stops);
+    expect(css.startsWith("rgb(190,30,45) 0%")).toBe(true);
+    expect(css.endsWith("rgb(40,120,200) 100%")).toBe(true);
+  });
+
+  test("the bar's ends are the same colours the map paints there", () => {
+    // Legend and ramp drifting apart is the failure this pins: the key has to
+    // be sampled from the same stops colorDepth interpolates over.
+    expect(gradientStops(SCALES.depth.stops).split(", ")[0]).toContain(colorDepth(DEPTH_MIN));
+    expect(gradientStops(SCALES.temp.stops).split(", ")[0]).toContain(colorTemp(10));
+  });
+
+  test("the signed scale labels its MIDDLE, because zero is the landmark", () => {
+    expect(SCALES.change.mid).toBe("no change");
+    expect(SCALES.depth.mid).toBeUndefined();
   });
 });
