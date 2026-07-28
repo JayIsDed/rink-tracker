@@ -17,6 +17,7 @@ import * as maintenance from "./routes/maintenance";
 import * as propane from "./routes/propane";
 import * as feed from "./routes/feed";
 import * as edger from "./routes/edger";
+import { startScheduler, runMorningJobs } from "./jobs/scheduler";
 
 const PORT = Number(process.env.PORT ?? 3739);
 const PUBLIC = new URL("../public/", import.meta.url).pathname;
@@ -28,6 +29,7 @@ export const BUILD_SHA = process.env.BUILD_SHA || "dev";
 
 await bootstrapAdmins();
 seedFixtures();
+startScheduler();
 
 // Client-routed paths. Anything here serves the shell; anything else that isn't
 // a real file 404s, so a typo doesn't silently render the app.
@@ -163,6 +165,30 @@ async function api(req: Request, url: URL): Promise<Response> {
   // ── Feed ──
   if (path === "/api/feed" && method === "GET") return feed.handleFeed(url);
   if (path === "/api/sessions" && method === "GET") return feed.handleSessions(url);
+
+  // Manual kick, for when someone wants the schedule now rather than at 07:00.
+  if (path === "/api/jobs/run" && method === "POST") {
+    if (!(await admin(req))) return bad("admin required", 403);
+    runMorningJobs();
+    return json({ ok: true, started: true });
+  }
+
+  // ── Schedule ──
+  if (path === "/api/schedule" && method === "GET") {
+    const from = Number(url.searchParams.get("from")) || Date.now();
+    const to = Number(url.searchParams.get("to")) || from + 86400000;
+    const rink = url.searchParams.get("rink");
+    return json(
+      db
+        .query(
+          `SELECT id, rink_code, starts_at, ends_at, title, kind FROM schedule
+            WHERE starts_at BETWEEN $from AND $to
+              AND ($rink IS NULL OR rink_code = $rink)
+            ORDER BY starts_at`
+        )
+        .all({ $from: from, $to: to, $rink: rink === "U" || rink === "L" ? rink : null })
+    );
+  }
 
   // ── Job health ──
   if (path === "/api/jobs/health" && method === "GET") {
