@@ -11,6 +11,7 @@ import { register } from "/shared/views.js";
 import { get, post } from "/shared/api.js";
 import { el, clear, empty, openSheet, closeSheet, toast, tick } from "/shared/ui.js";
 import { ago, stamp, dueLabel, clock12 } from "/shared/lib/dates.js";
+import { nextIceCut, iceCutsOn, cutContext, until } from "/shared/lib/schedule.js";
 
 const SEVERITY_LABEL = { 1: "normal", 2: "elevated", 3: "urgent" };
 
@@ -30,11 +31,16 @@ register({
     const boardWrap = el("div.card");
     const feedWrap = el("div.card");
     const iceWrap = el("div.card");
+    const cutWrap = el("div.card");
 
     // Desktop reads side by side; phone stacks. Same DOM, one grid class.
+    // The cut strip leads the left column: on a phone it is the first thing
+    // under the fold-line, which is the point — it is the only block here that
+    // tells you something you did not already know.
     root.append(
       el("div.grid-read", {}, [
         el("div", { style: { display: "flex", flexDirection: "column", gap: "var(--s4)" } }, [
+          cutWrap,
           boardWrap,
           iceWrap,
         ]),
@@ -47,17 +53,23 @@ register({
     );
 
     const reload = async () => {
-      const [overview, cards, feed, sessions] = await Promise.all([
+      const now = Date.now();
+      const dayStart = new Date(now).setHours(0, 0, 0, 0);
+      const [overview, cards, feed, sessions, slots] = await Promise.all([
         get("/api/overview"),
         get("/api/cards"),
         get(`/api/feed?since=${lastSeen()}&limit=25`),
         get("/api/sessions?limit=3"),
+        // Two days: today's list plus enough runway that the "next cut" line
+        // doesn't go blank at 9pm when the next one is tomorrow morning.
+        get(`/api/schedule?from=${dayStart}&to=${dayStart + 2 * 86400000}`).catch(() => []),
       ]);
       renderTickers(tickerWrap, overview.tickers, state, reload);
       renderPropane(propaneWrap, overview.propane, state, reload);
       renderBoard(boardWrap, cards, state, reload);
       renderFeed(feedWrap, feed);
       renderIce(iceWrap, sessions, navigate, Number(state.settings?.thin_spot_in ?? 2) || 2);
+      renderCuts(cutWrap, slots, navigate, now);
     };
 
     await reload();
@@ -521,6 +533,95 @@ function renderFeed(wrap, feed) {
     );
   }
   markSeen(feed.events[0].at);
+}
+
+// ── Ice-cut strip ─────────────────────────────────────────────────────
+//
+// Runbook R2. The only block on this page that tells the reader something they
+// did not already know — everything else here is a summary of what the crew
+// themselves wrote down. That asymmetry is why it leads the column.
+
+function renderCuts(wrap, slots, navigate, now) {
+  clear(wrap).append(
+    el("div.row", {}, [
+      el("p.section-title.grow", { style: { margin: 0 }, text: "Ice cuts" }),
+      el("button.btn.small.fixed", {
+        type: "button",
+        text: "All",
+        onclick: () => navigate("/schedule"),
+      }),
+    ])
+  );
+
+  if (!Array.isArray(slots) || !slots.length) {
+    // Distinguishable from "the pull failed" — the Schedule screen states
+    // freshness outright, and this points there rather than guessing here.
+    wrap.append(empty("No cuts scheduled today", "Tap All to check the week."));
+    return;
+  }
+
+  const next = nextIceCut(slots, now);
+  const todays = iceCutsOn(slots, isoLocal(now));
+
+  if (next) {
+    const running = next.starts_at <= now;
+    const { before, after } = cutContext(slots, next);
+    wrap.append(
+      el("div.row", { style: { marginTop: "var(--s3)" } }, [
+        el("span.grow", {}, [
+          el("div", {
+            style: { fontWeight: "650" },
+            text: `${clock12(next.starts_at)} · ${next.rink_code === "U" ? "Upper" : "Lower"}`,
+          }),
+          // What the cut sits between, in one line. This is the whole reason a
+          // crew member would rather glance here than walk to the printout.
+          el("div.dim.truncate", {
+            style: { fontSize: "12px" },
+            text:
+              before && after
+                ? `after ${before.title} · then ${after.title}`
+                : before
+                  ? `after ${before.title} · last cut of the day`
+                  : after
+                    ? `first on the sheet · then ${after.title}`
+                    : "next cut",
+          }),
+        ]),
+        el(`span.chip.fixed.${running ? "green" : (next.starts_at - now) / 60000 <= 15 ? "amber" : ""}`, {
+          text: running ? "on now" : until(next.starts_at, now),
+        }),
+      ])
+    );
+  }
+
+  if (todays.length) {
+    wrap.append(
+      el("p.dim", {
+        style: { fontSize: "12px", marginTop: "var(--s3)", marginBottom: "var(--s1)" },
+        text: `Today · ${todays.length} cut(s)`,
+      }),
+      el(
+        "div.row",
+        { style: { flexWrap: "wrap", gap: "var(--s2)" } },
+        todays.map((c) =>
+          el("span.chip", {
+            style: { opacity: (c.ends_at ?? c.starts_at) < now ? "0.45" : "1" },
+            text: `${clock12(c.starts_at)} ${c.rink_code}`,
+          })
+        )
+      )
+    );
+  } else if (next) {
+    wrap.append(
+      el("p.dim", { style: { fontSize: "12px", marginTop: "var(--s3)", marginBottom: 0 }, text: "Nothing further today." })
+    );
+  }
+}
+
+function isoLocal(ts) {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function renderIce(wrap, sessions, navigate, thinAt = 2) {

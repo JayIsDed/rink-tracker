@@ -1,6 +1,6 @@
 {
   "url": "http://localhost:3739",
-  "routes": ["/", "/ice", "/ice/entry", "/edger", "/maintenance", "/settings"],
+  "routes": ["/", "/ice", "/ice/entry", "/edger", "/maintenance", "/schedule", "/settings"],
   "storage": [{ "key": "rt:lastSeen", "value": 0 }],
   "cookies": [{ "name": "rt_who", "value": "TagTester" }],
   "ready": ["document.querySelector('#view')?.children.length > 0"],

@@ -12,6 +12,7 @@ import "/views/home.js";
 import "/views/ice.js";
 import "/views/edger.js";
 import "/views/maintenance.js";
+import "/views/schedule.js";
 import "/views/settings.js";
 
 export const state = {
