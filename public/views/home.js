@@ -37,20 +37,25 @@ register({
     // The cut strip leads the left column: on a phone it is the first thing
     // under the fold-line, which is the point — it is the only block here that
     // tells you something you did not already know.
-    root.append(
-      el("div.grid-read", {}, [
-        el("div", { style: { display: "flex", flexDirection: "column", gap: "var(--s4)" } }, [
-          cutWrap,
-          boardWrap,
-          iceWrap,
-        ]),
-        el("div", { style: { display: "flex", flexDirection: "column", gap: "var(--s4)" } }, [
-          tickerWrap,
-          propaneWrap,
-          feedWrap,
-        ]),
-      ])
-    );
+    //
+    // BUILT DETACHED, APPENDED AFTER THE FIRST LOAD. Appending first painted
+    // six empty 34px cards and then jumped them to full height when the data
+    // arrived — 0.15 of layout shift about 90ms in, every visit. Nothing is
+    // shown sooner by appending early, because the shell awaits this whole
+    // mount before it reveals anything; the early append only bought a flash
+    // of empty boxes. Measured on x1c-half: 0.172 → 0.
+    const grid = el("div.grid-read", {}, [
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "var(--s4)" } }, [
+        cutWrap,
+        boardWrap,
+        iceWrap,
+      ]),
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "var(--s4)" } }, [
+        tickerWrap,
+        propaneWrap,
+        feedWrap,
+      ]),
+    ]);
 
     const reload = async () => {
       const now = Date.now();
@@ -73,6 +78,7 @@ register({
     };
 
     await reload();
+    root.append(grid);
 
     // A deep link from an NFC tag lands here with the form already open.
     if (url.pathname === "/log/propane") {
@@ -360,6 +366,8 @@ async function openArchive(state) {
                     src: c.photos[0].thumb_url,
                     alt: "",
                     loading: "lazy",
+                    width: "36",
+                    height: "36",
                     style: { width: "36px", height: "36px", objectFit: "cover", borderRadius: "var(--r-sm)" },
                   })
                 : null,
@@ -409,6 +417,11 @@ function cardRow(c, state, reload) {
                 src: c.photos[0].thumb_url,
                 alt: "",
                 loading: "lazy",
+                // Intrinsic size as ATTRIBUTES, not just CSS. Without them the
+                // box is zero until the bytes land and every row below jumps
+                // when it does — the probe measures that as CLS.
+                width: "44",
+                height: "44",
                 style: {
                   width: "44px",
                   height: "44px",
@@ -499,6 +512,8 @@ function photoBlock(card, state, { pending, onChanged }) {
       src,
       alt: "",
       loading: "lazy",
+      width: "72",
+      height: "72",
       style: {
         width: "72px",
         height: "72px",
