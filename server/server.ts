@@ -12,6 +12,10 @@ import {
 } from "./identity";
 import { seedFixtures } from "./seed";
 import * as tickers from "./routes/tickers";
+import * as cards from "./routes/cards";
+import * as maintenance from "./routes/maintenance";
+import * as propane from "./routes/propane";
+import * as feed from "./routes/feed";
 
 const PORT = Number(process.env.PORT ?? 3739);
 const PUBLIC = new URL("../public/", import.meta.url).pathname;
@@ -116,16 +120,44 @@ async function api(req: Request, url: URL): Promise<Response> {
     return json({ ok: true });
   }
 
-  // ── Tickers ──
+  // ── Tickers + maintenance ──
   if (path === "/api/tickers" && method === "GET") return tickers.handleList();
-  const tickerMatch = /^\/api\/tickers\/(\d+)(\/nudge)?$/.exec(path);
+  if (path === "/api/overview" && method === "GET") return maintenance.handleOverview();
+  if (path === "/api/maintenance" && method === "GET") return maintenance.handleLog(url);
+
+  const tickerMatch = /^\/api\/tickers\/(\d+)(?:\/(nudge|complete))?$/.exec(path);
   if (tickerMatch) {
     const id = Number(tickerMatch[1]);
-    if (tickerMatch[2] === "/nudge" && method === "POST") {
-      return tickers.handleNudge(req, id, actor);
-    }
-    if (method === "PATCH") return tickers.handlePatch(req, id, (await admin(req)) != null);
+    const sub = tickerMatch[2];
+    if (sub === "nudge" && method === "POST") return tickers.handleNudge(req, id, actor);
+    if (sub === "complete" && method === "POST") return maintenance.handleComplete(req, id, actor);
+    if (!sub && method === "PATCH") return tickers.handlePatch(req, id, (await admin(req)) != null);
   }
+
+  // ── Propane ──
+  if (path === "/api/propane" && method === "GET") return propane.handleStatus();
+  if (path === "/api/propane" && method === "POST") return propane.handleSwap(req, actor);
+  if (path === "/api/propane/history" && method === "GET") return propane.handleHistory(url);
+
+  // ── Board ──
+  if (path === "/api/cards" && method === "GET") return cards.handleList(url);
+  if (path === "/api/cards" && method === "POST") {
+    return cards.handleCreate(req, actor, (await admin(req)) != null);
+  }
+  const cardMatch = /^\/api\/cards\/(\d+)(?:\/(claim|unclaim|done|reopen|archive))?$/.exec(path);
+  if (cardMatch) {
+    const id = Number(cardMatch[1]);
+    const action = cardMatch[2];
+    const isAdmin = (await admin(req)) != null;
+    if (action && method === "POST") return cards.handleAction(req, id, action, actor, isAdmin);
+    if (!action && method === "GET") return cards.handleGet(id);
+    if (!action && method === "PATCH") return cards.handlePatch(req, id, actor, isAdmin);
+    if (!action && method === "DELETE") return cards.handleDelete(id, actor, isAdmin);
+  }
+
+  // ── Feed ──
+  if (path === "/api/feed" && method === "GET") return feed.handleFeed(url);
+  if (path === "/api/sessions" && method === "GET") return feed.handleSessions(url);
 
   // ── Job health ──
   if (path === "/api/jobs/health" && method === "GET") {
@@ -198,7 +230,7 @@ async function serveFile(pathname: string): Promise<Response | null> {
   return new Response(file, { headers });
 }
 
-const server = Bun.serve({
+export const server = Bun.serve({
   port: PORT,
   idleTimeout: 60,
   async fetch(req) {
