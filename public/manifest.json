@@ -1,13 +1,12 @@
 {
   "name": "Rink Tracker",
   "short_name": "Rink",
-  "description": "AIO operations hub for the rink",
+  "description": "Ice, maintenance and the crew board for both rinks",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a1320",
-  "theme_color": "#0a1320",
-  "orientation": "any",
+  "background_color": "#070b10",
+  "theme_color": "#070b10",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

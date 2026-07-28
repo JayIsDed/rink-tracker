@@ -1,108 +1,90 @@
-// Rink Tracker — service worker.
-// Served from /sw.js by server.ts with __SW_VERSION__ token replaced at request time.
-// Cache-Control: no-cache server-side so updates propagate same-day.
+// Service worker.
 //
-// Strategies:
-//   - shell: cache-first (precached on install)
-//   - GET /api/*: network-first with cache fallback
-//   - POST /api/*: bypassed entirely (page-level outbox handles offline writes)
+// FOOTGUN 2 (n-71): the old worker's cache key was the server's BOOT TIMESTAMP,
+// so every container restart busted every client's cache — including restarts
+// that changed nothing. The key is now the build sha, injected by the server at
+// request time from the BUILD_SHA env var (set by a Docker build arg, because
+// the image has no .git for `git rev-parse` to read).
+//
+// It also precached nine paths that no longer exist. That was survivable only
+// because the install used allSettled — meaning the shell cache was quietly
+// half-populated on every install. The core list below is deliberately tiny and
+// everything else is cached opportunistically as it is fetched.
 
-const VERSION = "__SW_VERSION__";
-const SHELL_CACHE = `rink-tracker-shell-${VERSION}`;
-const API_CACHE = `rink-tracker-api-${VERSION}`;
+const VERSION = "__BUILD_SHA__";
+const SHELL_CACHE = `rink-shell-${VERSION}`;
+const RUNTIME_CACHE = `rink-runtime-${VERSION}`;
 
-const SHELL_URLS = [
-  "/",
-  "/index.html",
-  "/app.js",
-  "/style.css",
-  "/manifest.json",
-  "/shared/auth.js",
-  "/shared/api.js",
-  "/shared/router.js",
-  "/shared/outbox.js",
-  "/tabs/home/index.html",
-  "/tabs/heatmap/index.html",
-  "/tabs/heatmap/tab.js",
-  "/tabs/issues/index.html",
-  "/tabs/issues/tab.js",
-  "/tabs/maintenance/index.html",
-  "/tabs/work/index.html",
-  "/tabs/handoff/index.html",
-  "/tabs/admin/index.html",
-];
+// Only files that certainly exist. A 404 here aborts installation.
+const CORE = ["/", "/index.html", "/app.js", "/shared/theme.css", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(SHELL_CACHE);
-    // Don't fail the install if a tab partial 404s during early scaffolding.
-    await Promise.allSettled(SHELL_URLS.map((u) => cache.add(u)));
-    await self.skipWaiting();
-  })());
+  event.waitUntil(
+    caches
+      .open(SHELL_CACHE)
+      .then((c) => c.addAll(CORE))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil((async () => {
-    const names = await caches.keys();
-    await Promise.all(
-      names
-        .filter((n) => n !== SHELL_CACHE && n !== API_CACHE)
-        .map((n) => caches.delete(n))
-    );
-  })());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k !== SHELL_CACHE && k !== RUNTIME_CACHE).map((k) => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  if (url.origin !== self.location.origin) return;
+  // Writes never touch the cache — the page-level outbox owns offline writes.
   if (req.method !== "GET") return;
+  if (url.origin !== self.location.origin) return;
 
+  // The API is always live. A stale reading presented as current is worse than
+  // no reading, and the UI has explicit stale and error states for this.
   if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(req, API_CACHE));
+    event.respondWith(
+      fetch(req).catch(
+        () =>
+          new Response(JSON.stringify({ error: "offline" }), {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          })
+      )
+    );
     return;
   }
 
-  event.respondWith(cacheFirst(req, SHELL_CACHE));
-});
-
-async function cacheFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(req);
-  if (cached) {
-    fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); }).catch(() => {});
-    return cached;
+  // Navigations: network first so a deploy lands immediately, shell as fallback
+  // so the app still opens on a dead connection.
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req).catch(() => caches.match("/index.html").then((r) => r ?? Response.error()))
+    );
+    return;
   }
-  try {
-    const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (err) {
-    if (req.mode === "navigate") {
-      const fallback = await cache.match("/index.html");
-      if (fallback) return fallback;
-    }
-    throw err;
-  }
-}
 
-async function networkFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  try {
-    const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (err) {
-    const cached = await cache.match(req);
-    if (cached) return cached;
-    return new Response(JSON.stringify({ offline: true, error: "no cached response" }), {
-      status: 503,
-      headers: { "content-type": "application/json", "x-from-sw": "offline" },
-    });
-  }
-}
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "sw:skip-waiting") self.skipWaiting();
+  // Static assets: serve from cache, revalidate behind it.
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const network = fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => cached ?? Response.error());
+      return cached ?? network;
+    })
+  );
 });

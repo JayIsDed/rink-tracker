@@ -1,0 +1,22 @@
+{
+  "url": "http://localhost:3739",
+  "routes": ["/settings"],
+  "ready": ["document.querySelector('#view')?.children.length > 0"],
+  "main": ".view",
+  "scroll": ".view",
+  "dock": ".dock",
+  "tile": ".card",
+  "metrics": ".num, .metric, [data-metric]",
+  "tokens": "public/shared/theme.css",
+  "interactiveExtra": [".chip"],
+  "sheet": {
+    "trigger": "#who-btn",
+    "panel": ".sheet",
+    "openSignal": "document.querySelector('.sheet')?.classList.contains('open')",
+    "outside": ".topbar"
+  },
+  "platforms": ["mobile", "desktop"],
+  "hexAllow": ["public/manifest.json", "public/index.html", "public/shared/theme.css"],
+  "allowActuation": false,
+  "out": ".probe"
+}
