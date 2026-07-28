@@ -639,10 +639,19 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
   const thinAt = Number(state.settings?.thin_spot_in ?? 2) || 2;
   const session = createEntry({ rink: "U", date, thinAt });
 
+  // What this point read LAST time, per point. Round one put it under the depth
+  // field and it is the cheapest anomaly check there is — an operator who can
+  // see "3.42\" last week" catches their own fat-finger before the server ever
+  // has to have an opinion. The session API already returns it, so this costs
+  // one map and no extra request.
+  const prevByPoint = new Map();
+  let prevDate = null;
+
   const progressChip = el("span.chip");
   const savedChip = el("span.chip");
   const pointTitle = el("h2", { style: { margin: 0, fontSize: "24px" } });
   const pointNote = el("div.dim", { style: { fontSize: "13px" } });
+  const lastLine = el("div.dim", { style: { fontSize: "12px", minHeight: "16px", marginTop: "var(--s1)" } });
   const depthIn = el("input.input", {
     type: "number",
     step: "0.01",
@@ -733,13 +742,40 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
     depthIn.select?.();
   }
 
+  /**
+   * "last: 3.42" (Jul 07)", plus the change if something is typed. Live on
+   * input, because the moment the number is worth checking is while the hand
+   * is still on the keys.
+   */
+  function renderLastReading() {
+    const n = session.current();
+    const prev = prevByPoint.get(n);
+    if (prev == null) {
+      lastLine.textContent = "no earlier reading for this point";
+      lastLine.style.color = "";
+      return;
+    }
+    const stamp = prevDate ? ` (${shortDate(Date.parse(prevDate + "T12:00:00"))})` : "";
+    const typed = Number(depthIn.value.trim());
+    if (!depthIn.value.trim() || !Number.isFinite(typed)) {
+      lastLine.textContent = `last: ${prev.toFixed(2)}"${stamp}`;
+      lastLine.style.color = "";
+      return;
+    }
+    const delta = typed - prev;
+    lastLine.textContent = `last: ${prev.toFixed(2)}"${stamp} · ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}"`;
+    // Half an inch in a week is not impossible, but it is worth a second look
+    // before you walk away from it.
+    lastLine.style.color = Math.abs(delta) >= 0.5 ? "var(--amber)" : "";
+  }
+
   function renderAll() {
     const n = session.current();
     const pos = session.position();
     const p = session.progress();
     pointTitle.textContent = `Point ${n}`;
     // Short enough not to wrap mid-phrase beside the chips on a 412px phone.
-    pointNote.textContent = `${pos.index + 1} of ${pos.total} · walk order`;
+    pointNote.textContent = `${pos.index + 1} of ${pos.total} · ${session.order === "numeric" ? "by number" : "walk order"}`;
     progressChip.textContent = `${p.measured}/35 measured`;
     savedChip.textContent = p.failed
       ? `${p.failed} failed`
@@ -748,7 +784,29 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
         : `${p.saved} saved`;
     savedChip.style.color = p.failed ? "var(--red)" : p.inflight ? "var(--amber)" : "var(--green)";
     loadInputs();
+    renderLastReading();
+    markOrder();
     paint();
+  }
+
+  /**
+   * Walk order vs numeric. `entry.setOrder` has existed and been tested since
+   * R3 with nothing on screen ever calling it — round one had the toggle in its
+   * entry bar. It matters because the serpentine walk assumes you started at
+   * one particular corner, and an operator who came in the other door is being
+   * marched backwards through their own sheet.
+   */
+  const orderBtn = el("button.btn.small", {
+    type: "button",
+    onclick: () => {
+      commit();
+      session.setOrder(session.order === "numeric" ? "walk" : "numeric");
+      tick();
+      renderAll();
+    },
+  });
+  function markOrder() {
+    orderBtn.textContent = session.order === "numeric" ? "Walking order" : "By number";
   }
 
   function renderBanner(s) {
@@ -775,6 +833,7 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
   tempIn.addEventListener("keydown", (e) => e.key === "Enter" && step(1));
   depthIn.addEventListener("blur", () => commit());
   tempIn.addEventListener("blur", () => commit());
+  depthIn.addEventListener("input", renderLastReading);
 
   function finish() {
     commit();
@@ -858,7 +917,10 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
         el("div.row", { style: { gap: "var(--s1)", justifyContent: "flex-end" } }, [progressChip, savedChip]),
       ]),
       el("div.row", { style: { marginTop: "var(--s3)", gap: "var(--s3)" } }, [
-        el("span.grow", {}, [el("div.field", {}, [el("label", { text: "Depth (inches)" }), depthIn])]),
+        el("span.grow", {}, [
+          el("div.field", {}, [el("label", { text: "Depth (inches)" }), depthIn]),
+          lastLine,
+        ]),
         el("span.fixed", { style: { width: "34%" } }, [
           el("div.field", {}, [el("label", { text: "Temp °F" }), tempIn]),
         ]),
@@ -874,6 +936,7 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
         text: "Green means the server has it. Amber is still sending. Tap any dot to jump there.",
       }),
       el("div.row", { style: { marginTop: "var(--s3)", gap: "var(--s2)" } }, [
+        orderBtn,
         el("button.btn.grow", {
           type: "button",
           text: "Next gap",
@@ -894,8 +957,17 @@ async function mountEntry({ root, url, state, navigate, setRink }) {
   // so an interrupted walk picks up at the gap instead of back at point 1.
   try {
     const existing = await get(`/api/ice/session?rink=U&date=${date}`);
-    if (existing?.points) session.hydrate(existing.points);
+    if (existing?.points) {
+      session.hydrate(existing.points);
+      prevDate = existing.prev_date ?? null;
+      for (const p of existing.points) {
+        if (p.prev_depth_in != null) prevByPoint.set(p.point_nbr, p.prev_depth_in);
+      }
+    }
   } catch {
+    // Losing the previous-reading hints is survivable; losing what is already
+    // saved is not, because the walk would restart at point 1 over the top of
+    // real data. Say so rather than starting a silent second session.
     toast("Couldn't check what's already saved — starting fresh", "amber");
   }
 
