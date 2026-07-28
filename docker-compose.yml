@@ -1,6 +1,10 @@
 services:
   rink-tracker:
-    build: .
+    build:
+      context: .
+      args:
+        # Supplied by the deploy: BUILD_SHA=$(git rev-parse --short HEAD)
+        BUILD_SHA: ${BUILD_SHA:-dev}
     container_name: rink-tracker
     restart: unless-stopped
     networks:
