@@ -6,7 +6,11 @@ iPhone and Android, no app install, no browser permission prompt, nothing to
 grant. The Web NFC API would have been Android-Chrome only and would have
 needed the app already open — the opposite of what a tag is for.
 
-Tag hardware: **NTAG215 — confirmed in hand, 2026-07-28. No order needed.**
+Tag hardware: **NTAG215 or better.** An earlier note in this file claimed the
+215s were confirmed in hand on 2026-07-28; Jay corrected that the same day —
+they are not to hand, so V3 waits. Do not re-record "in hand" here without
+someone holding one.
+
 215s carry 504 bytes of user memory against the longest URL below at ~60
 characters, so they are wildly oversized for this and that is fine. NTAG213
 (144 bytes) would also have been ample if more are ever needed.

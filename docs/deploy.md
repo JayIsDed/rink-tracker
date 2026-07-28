@@ -81,3 +81,66 @@ subset of rink-tracker's 2,566. Nothing to merge.
   trap has already fired once here — prod ran four commits ahead of GitHub main
   for weeks. It is reconciled now, but the habit of checking is the fix.
 - Flip Traefik before V7. Prod takes writes during the soak.
+
+---
+
+# R7 — as executed, 2026-07-28
+
+## The soak stack (live now)
+
+`/opt/stacks/rink-tracker-v2/`, container `rink-tracker-v2`, host port **3740**,
+temporary hostname **`rink-v2.pancake3d.com`**. The incumbent is untouched and
+still authoritative on `rink-tracker.pancake3d.com`.
+
+A hostname rather than the bare port on purpose: the service worker, the install
+prompt and the NFC deep links all need a **secure origin**, so
+`http://192.168.8.112:3740` cannot honestly test the PWA. The port stays as a
+LAN fallback only.
+
+```bash
+# deploy to the soak stack
+git push deploy-v2 feat/rink-rebuild:main
+ssh docker-services "cd /opt/stacks/rink-tracker-v2 && \
+  BUILD_SHA=\$(cd src && git rev-parse --short HEAD) docker compose up -d --build"
+```
+
+## Receipts
+
+- **V1 PASSED** against a `VACUUM INTO` snapshot of live prod: `2566 / 35 / 2 /
+  64`, depth Σ 8018.327 and temp Σ 44979.62 equal on both sides, span
+  2024-10-15 → 2026-07-14, 74 sessions.
+- **V5 half 1 PASSED** — `docker restart` left the served SW `VERSION` at
+  `9bae3e0`, so a restart no longer busts every client's cache.
+- Cron caught up unprompted on first boot: schedule pull parsed 1285 / stored
+  **1224 rows, 382 ice cuts**; weather **gap 10 → 0**.
+- Delta 2 confirmed live: `[identity] bootstrapped admins from RINK_ADMIN_PINS`.
+
+## Two corrections to earlier notes in this repo
+
+1. **The live DNS record is `proxied=true`**, not `proxied=false` as the older
+   deploy notes and `memory/rink-tracker.md` both say. The soak record was
+   created by *reading the live record and mirroring it* rather than by
+   asserting the remembered value, which is the only reason the discrepancy
+   surfaced. Mirror, don't assume, when you make the flip record too.
+2. **The image now carries `scripts/`.** The carry tool has to run inside the
+   container — the docker-vm host has neither `bun` nor `sqlite3` — so the V7
+   re-carry runs `docker compose run --rm` against the same code the container
+   runs, not a copy on a laptop.
+
+## The soak's one sharp edge
+
+`carry-data.ts` deletes and re-inserts only the four carried tables
+(`rinks`, `points`, `measurements`, `weather`). Cards, maintenance, propane
+swaps, edger runs and members **survive** a re-carry.
+
+Measurements do **not**. Anything entered through v2's ice entry screen during
+the soak is destroyed by the V7 re-carry at the flip. Treat v2 measurement entry
+as throwaway until the flip; everything else you enter is real and persists.
+
+Also: `EXPECTED` in the carry script is hard-pinned to n-71's counts, so if prod
+takes new measurements during the soak, strict parity **fails by design**. Pass
+`--no-strict` at that point and read the source-vs-carried columns instead — the
+source/carried match is the real check, the expected column is the tripwire.
+
+At time of writing prod's `-wal` has not changed since **2026-07-14**, so the
+rink is not currently taking writes and the divergence risk is near zero.

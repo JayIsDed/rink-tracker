@@ -1,179 +1,74 @@
 # Rink Tracker — Handoff
 
-_Last updated: 2026-05-02 14:15 EDT_
+_Last updated: 2026-07-28 · branch `feat/rink-rebuild`_
 
-AIO operations hub for the rink. Replaces ice-tracker (deprecation candidate)
-and absorbs the M1Encompass-friction manual logs. Built to make logging so
-frictionless that staff actually use it ("oh shit I found this, let me put
-it in"), not a chore.
+The rebuild. The contract is the pad tile **[n-72][open-projects]**
+(`claude-runbook-rink-rebuild.md`) — laws, rulings, work packages and the V1–V9
+verify list all live there and are not restated here. Findings that produced it
+are [n-71]; the original order is [n-23].
 
----
-
-## Quick start (next session)
-
-```bash
-cd ~/git/rink-tracker
-echo 'ADMIN_PINS=jay:9999' > .env   # set real PINs before deploy
-~/.bun/bin/bun server/server.ts     # → http://localhost:3737
-```
-
-Heatmap test: `URL_BASE=http://localhost:3737/#/heatmap ~/.bun/bin/bun scripts/screenshot.ts` writes `data/rink-screenshot.png` for visual verification.
+Everything below is state, not plan.
 
 ---
 
-## State of the world
+## Where it stands
 
-### ✅ Step A — shell + auth + tab placeholders (done 2026-05-02 11:38 EDT)
-- Bun + TS server, single SQLite (`data/rink.db`, WAL mode), idempotent schema bootstrap
-- `server/db.ts` — shared `db` instance + legacy ice-tracker tables (rinks, points, measurements, weather, idempotency_keys) + AIO tables (users, sessions, audit_log) bootstrapped on boot
-- `server/auth.ts` — clean module: identity (cookie | X-User-Id), admin PIN seeding from `ADMIN_PINS` env, audit() helper, session cookies with X-Forwarded-Proto awareness, all 5 auth/identity endpoints
-- `server/server.ts` — entry point; static serving, sw.js version injection, route mounting
-- `public/index.html` — shell with rink switcher (Upper/Lower) + identity chip + tab nav + identity/admin dialogs
-- `public/style.css` — design tokens, dock-nav (bottom on mobile, top on desktop), 44px touch targets, glassmorphism, sub-360 breakpoint
-- `public/app.js` — boot identity, mount router, wire rink switcher + identity dialogs
-- `public/shared/{auth.js,api.js,router.js,outbox.js}` — reusable modules
-- `public/sw.js` — service worker with shell precache + tab partials
-- `Dockerfile` + `docker-compose.yml` (LAN port 3738 — coexists with ice-tracker on 3737), `.env.example`, `.gitignore`
-- 7 tab placeholders, each labeled with the step that ships it
+**R0–R6 complete. R7 is half done: v2 is deployed alongside and soaking.**
 
-### ✅ Step B — heatmap tab port (done 2026-05-02 12:00 EDT)
-- DB cloned: `cp /home/jay/git/ice-tracker/data/ice_tracker.db → /home/jay/git/rink-tracker/data/rink.db` (2,216 measurements, 35 points, 64 weather records — preserved)
-- `server/routes/heatmap.ts` — all measurement/anomaly/weather queries, **rink-aware via `?rink=U|L`** (defaults to `U` for legacy clients)
-- `public/tabs/heatmap/{index.html,tab.js}` — full port from ice-tracker, scoped to tab root, ~1,050 lines
-- Uses `apiFetch` so every save stamps `X-User-Id` automatically
-- Subscribes to `ctx.onRinkChange` — heatmap reloads when user toggles Upper↔Lower; Lower shows empty state
-- Router teardown contract: `init()` returns a destroy fn, called on tab navigation
-- Mobile bottom-sheet pattern preserved; sits above the dock nav now (offset by `--tabnav-h`)
-- Headless screenshot at `#/heatmap` confirms full visual parity with ice-tracker
-- `scripts/screenshot{,-mobile}.ts` ported for ongoing visual verification
-
-### ✅ Step 3 — issues + photos (done 2026-05-02 12:38 EDT)
-- Tables: `issues`, `issue_revisions`, `issue_photos` (idempotent bootstrap, FKs, indexes)
-- Photo pipeline: sharp auto-rotates from EXIF → 2000px max edge → strips metadata → JPEG out + 480px thumb. Stored under `data/photos/YYYY-MM-DD/<ts>-<rand>.jpg`
-- Sharp moved devDep → dep; Dockerfile gained `bun install --frozen-lockfile --production`; `bun.lock` committed
-- API: `GET/POST /api/issues`, `GET/PATCH /api/issues/:id`, `POST /api/issues/:id/photos`, `DELETE /api/issues/:id/photos/:pid` (admin), `POST /api/issues/:id/comment`, `GET /api/issues/by-point` (heatmap cross-link), `GET /api/photos/...` (path-traversal-safe)
-- Permissions: members create + edit OWN title/body/photos + change ANY status + comment any. Admin (cookie session) edits everything, deletes photos, changes severity (priority lever)
-- UI: list cards w/ thumb + sev/status pills + age, status filter strip, FAB. New-issue sheet w/ camera-capture multi-photo + severity pills + optional pin schematic (snaps to nearest of 35 numbered points within 12ft; otherwise free pin via x_norm/y_norm; Lower-rink omits the grid). Detail dialog w/ carousel + revision timeline (newest first) + status changer + add-comment + add-photo + admin severity changer + admin photo delete
-- Verified via curl smoke test (12 cases, all pass) + headless screenshot (desktop + mobile layouts clean)
-
-### ⏭ Step 4 — maintenance (NEXT)
-- Tables: `maintenance_log` (zamboni / blade / oil / grease entries), `maintenance_schedule` (recurring + due-date)
-- Surface "due soon / overdue" on Home tab (step 6) and as a badge on the maintenance tab
-- Reuse the issues-tab card pattern for log entries
-- Reuse the `apiFetch` + `audit` plumbing from step 3
-
-### ⏭ Steps 5–7 (queued — see also tasks #2–6 in TaskList)
-5. Work events (flood/cut/edge) + pre-defined zone picker on rink schematic
-6. Dashboard summary endpoint + Home tab (open issues, due maint, today's work, last handoff). Heatmap pin-rendering of open issues lands here too — `/api/issues/by-point` is already shipped, just hook the renderer
-7. Shift handoff — short note + checklist, surfaces on Home for next shift
-8. UI polish pass — shelf-dashboard quality across the shell + all tabs (rink/ice aesthetic). Refactor `POINT_XY` + rink-outline drawing into `public/shared/rink-geom.js` (currently duplicated in heatmap + issues tabs)
-
-### ⏭ Step Z — sunset ice-tracker
-- Deprecation banner in ice-tracker UI
-- 302 at traefik level: `ice-tracker.pancake3d.com` → `rink-tracker.pancake3d.com#/heatmap`
-- Stop ice-tracker container, archive `JayIsDed/ice-tracker` repo on GitHub
-
----
-
-## Architecture summary
-
-### Tab layout (hash-routed SPA, lazy-loaded)
-| route | tab | status |
+| WP | what | state |
 |---|---|---|
-| `#/` | Home | stub (step 6) |
-| `#/heatmap` | Heatmap | **shipped (step B)** |
-| `#/issues` | Issues | **shipped (step 3)** |
-| `#/maintenance` | Maintenance | stub (step 4 — next) |
-| `#/work` | Work events | stub (step 5) |
-| `#/handoff` | Shift handoff | stub (step 7) |
-| `#/admin` | Admin (cookie-gated) | stub (step 8) |
+| R0 | recon, git reconcile, Forgejo remote, BondSports probe | done |
+| R1 | schema, carry, identity, shell, test scaffold | done — V1 |
+| R2 | home surface: tickers, propane, board, feed, settings | done — V8 |
+| R3 | ice: entry mode, heatmap, thin-spot strip, outbox | done |
+| R4 | edger + maintenance detail | done |
+| R5 | 7am cron, weather backfill, NFC routes | done — V4, V9 |
+| R6 | device matrix, icons, SW build-sha | done — V6 |
+| R7 | **cutover** | **alongside up, flip pending** |
 
-### Identity model
-- **member** — pick name once → localStorage. Stamped via `X-User-Id` header. No friction.
-- **admin** — env `ADMIN_PINS=name:pin,...` seeded at boot. Login → server cookie (httpOnly, SameSite=Lax, 12h). Required for editing other people's entries, altering priorities, viewing audit log.
+**Tests:** 205 pass. **Probe:** 180/180 renders green across five device classes.
 
-### Tables in `data/rink.db`
-**Legacy:** `rinks`, `points`, `measurements`, `weather`, `idempotency_keys`
-**AIO foundational:** `users`, `sessions`, `audit_log` (shipped)
-**Issues:** `issues`, `issue_revisions`, `issue_photos` (shipped step 3)
-**AIO upcoming:** `maintenance_log`, `maintenance_schedule`, `work_events`, `work_event_zones`, `shift_handoffs`
+## Live right now
 
-All AIO tables (except auth) carry a `rink_code` FK so Upper/Lower filter cleanly.
-
-### Repo layout
-```
-~/git/rink-tracker/
-├── server/
-│   ├── server.ts            # router + boot + static
-│   ├── auth.ts              # identity/audit/cookies/admin login
-│   ├── db.ts                # schema bootstrap + shared db instance + idempotency queries
-│   └── routes/
-│       ├── heatmap.ts       # measurements + anomalies + weather + timeseries
-│       └── issues.ts        # issues + photos + revisions + comments + by-point
-├── public/
-│   ├── index.html, app.js, style.css, sw.js, manifest.json
-│   ├── shared/{auth.js, api.js, router.js, outbox.js}
-│   └── tabs/{home,heatmap,issues,maintenance,work,handoff,admin}/
-│       └── index.html (+ tab.js for heatmap & issues; others stubs)
-├── scripts/screenshot{,-mobile}.ts
-├── data/rink.db (gitignored)
-├── Dockerfile, docker-compose.yml, .env.example, .gitignore
-└── README.md, HANDOFF.md (this file)
-```
-
----
-
-## Deploy state
-| Where | URL | Status |
+| | URL | serving |
 |---|---|---|
-| Local dev | `http://localhost:3737` | ✓ working |
-| Container LAN | `http://192.168.8.112:3738` | ✓ live |
-| Production | `https://rink-tracker.pancake3d.com` | **✓ live (2026-05-02 14:15 EDT)** |
-| GitHub | `https://github.com/JayIsDed/rink-tracker` | private, pushed |
+| incumbent (authoritative) | `rink-tracker.pancake3d.com` | old app, `f9afd03` |
+| **rebuild (soaking)** | **`rink-v2.pancake3d.com`** | `feat/rink-rebuild` |
+| predecessor (to be sunset) | `ice-tracker.pancake3d.com` | frozen, subset |
 
-ice-tracker still runs at `https://ice-tracker.pancake3d.com` and on dev port 3737. Both apps coexist until sunset (step Z).
+Soak stack: `/opt/stacks/rink-tracker-v2/`, port 3740, deploy remote
+`deploy-v2`. Procedure and receipts: `docs/deploy.md`.
 
-### Prod stack layout (LXC 112)
-```
-/opt/stacks/rink-tracker/
-├── docker-compose.yml       # stack-root compose, build: ./src, volumes: ./data
-├── .env                     # ADMIN_PINS=... (chmod 600, gitignored, NOT in repo)
-├── data/                    # rink.db (cloned from ice_tracker.db) + photos/YYYY-MM-DD/
-└── src/                     # git deploy target (main branch checked out via updateInstead)
-```
-- Compose at stack root references `build: ./src` and `volumes: - ./data:/app/data`
-- Data dir was seeded with the live ice-tracker DB clone (2,216 measurements)
-- Sharp 0.34.5 builds cleanly in `oven/bun:1.3-alpine` with `bun install --frozen-lockfile --production`
+## What is left
 
-### Redeploy flow (next time)
-```bash
-git -C ~/git/rink-tracker push deploy HEAD:main
-ssh docker-services "cd /opt/stacks/rink-tracker && docker compose up -d --build"
-```
-The deploy remote is configured locally as `deploy` → `ssh://docker-services/opt/stacks/rink-tracker/src`.
+1. **Jay's soak** — real use on laptop + S24U. The only thing gating the flip.
+2. **V7 + Traefik flip** — fresh prod snapshot, re-carry, parity, move the
+   labels, stop the old container. `docs/deploy.md` has the sharp edges,
+   including which of v2's data a re-carry destroys.
+3. **Step Z — ice-tracker sunset.** 302 → rink-tracker, kill `:3737` and its
+   stack, archive the repo, drop the CF record after the redirect soaks.
+4. **V3 — physical NFC taps.** Six tags per `docs/nfc-tags.md`, on the S24U
+   *and* a crew iPhone; the cross-platform claim is the whole point. Blocked on
+   tags being to hand. The routes ship regardless — they are live and V2 passed
+   on a cold device.
 
-### Cloudflare DNS
-A record: `rink-tracker.pancake3d.com → 47.17.240.51`, proxied=false, TTL 300 (created via CF API on deploy). Mirrors ice-tracker's pattern. Wildcard cert from traefik covers it — no new ACME challenge.
+## Still needs Jay
 
-**CRITICAL traefik gotcha (from ice-tracker handoff):** when redeploying the traefik stack itself, always use both compose files: `docker compose -f docker-compose.yml -f compose.prod.yml up -d`. The overlay publishes ports 80/443/8883. Plain `up -d` strips port publishing and takes ALL pancake3d.com domains offline.
+- **Real ticker intervals** (oil/blade per machine). Seeded values are
+  placeholders and the settings screen says so in words — they are not dressed
+  up as measured.
+- **Crew member names** for seeding.
+- **Tag placement** once tags exist.
+- **12h vs 24h.** 12h AM/PM assumed — general crew audience, not Jay's personal
+  24h preference. One word overrules it.
 
----
+## Known loose ends
 
-## Important context
-- **The rink is the user's WORK rink.** Daily ops use by rink staff (mostly mobile), not a personal project.
-- **Frictionless logging is the prime directive.** Don't add ceremony to writes. PIN gates only admin-altering actions, not member writes.
-- **AQ is out of scope** — corporate M1 tracks CO2/NO2/CO. Rink-tracker doesn't touch it.
-- **Both rinks.** Most features apply to Upper + Lower. Heatmap tab is Upper-only (Lower is sand, no thickness data).
-- **Edger zones — pre-defined grid** (decided 2026-05-02): tap-tap-done on the rink schematic, not pixel-brush. ~12 named zones (corners, faceoff circles, neutral, blue line, goal mouths). Cold-hand-friendly.
-- **Admin PINs — env only** (decided 2026-05-02): predetermined admins seeded from `ADMIN_PINS`. No in-app admin management. Rotate by editing env + restart.
-
----
-
-## Pickup checklist for next session
-
-1. `cd ~/git/rink-tracker && git pull` (just in case)
-2. Read this file (HANDOFF.md) + `README.md` for orientation
-3. Verify dev still works: `~/.bun/bin/bun server/server.ts → http://localhost:3737/#/heatmap`
-4. Pick the next step (default: **step 3 — issues + photos**)
-5. Mark task #2 in TaskList as in_progress, build it
-6. Update this HANDOFF.md when done with the step
+- `public/style.css` is a **1,452-line orphan** from round one. Nothing links
+  it; `shared/theme.css` is the live stylesheet. Deliberately not deleted
+  mid-rebuild — delete it after the flip, when a regression would be
+  attributable.
+- Schedule source header claims 1,311 events against 1,285 parsed. The gap is
+  logged every run so a *widening* gap is visible. Not a defect yet.
+- v2's data files are root-owned (the container runs as root, and the carry
+  created them). Consistent, but host-side tooling needs sudo to read them.
