@@ -272,7 +272,51 @@ export function spawnCard(opts: {
     $due_at: null,
     $due_text: null,
   })!;
+  // Audited like any other creation. Without this the one card type nobody
+  // typed by hand is also the one whose history starts blank — and "where did
+  // this come from" is exactly the question asked about a card that appeared
+  // on the board on its own.
+  audit(opts.actor, "card.create", String(id), { title: opts.title, spawned: true });
   return id;
+}
+
+const qHistory = db.query<
+  { actor: string | null; action: string; detail: string | null; at: number },
+  [string]
+>(`
+  SELECT actor, action, detail, at FROM audit_log
+   WHERE target = ? AND action LIKE 'card.%'
+   ORDER BY at
+`);
+
+/**
+ * A card's history, read out of the audit log.
+ *
+ * "Every write is attributed + timestamped" is a law on n-72 and it was being
+ * kept in a table nothing could read. Round one showed a timeline on every
+ * issue; the rebuild wrote better records and then showed none of them.
+ *
+ * The log is the source, not a second events table — same reasoning as the
+ * feed being a VIEW. Nothing here is dual-written, so nothing can drift.
+ */
+export function handleHistory(id: number): Response {
+  if (!qCard.get(id)) return bad("no such card", 404);
+  return json(
+    qHistory.all(String(id)).map((r) => ({
+      actor: r.actor,
+      action: r.action.slice("card.".length),
+      at: r.at,
+      detail: r.detail ? safeParse(r.detail) : null,
+    }))
+  );
+}
+
+function safeParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
 }
 
 export function getCard(id: number): Card | null {

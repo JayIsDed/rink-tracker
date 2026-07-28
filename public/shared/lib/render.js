@@ -126,6 +126,24 @@ export function rinkMarkings() {
     width: 0.4,
   });
 
+  // The Zamboni door, on the bottom boards past the lower-left corner arc.
+  //
+  // Round one drew this on both its canvases and the rebuild dropped it. It is
+  // the only asymmetric feature on the whole sheet — without it a rink drawing
+  // is left-right and top-bottom symmetric, and an operator standing on the ice
+  // has nothing to tell them which end of the picture they are at. Everything
+  // else here is decoration; this one is orientation.
+  shapes.push({
+    kind: "rect",
+    x: CORNER_R + 2,
+    y: RINK_H - 1.2,
+    w: 14,
+    h: 1.2,
+    color: FAINT,
+    width: 0.4,
+    label: "ZAM",
+  });
+
   return shapes;
 }
 

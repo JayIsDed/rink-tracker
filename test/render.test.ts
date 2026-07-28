@@ -170,3 +170,30 @@ describe("heat grid", () => {
     expect(ultrawide).toBeGreaterThanOrEqual(1.25);
   });
 });
+
+describe("the Zamboni door", () => {
+  const zam = rinkMarkings().find((s: any) => s.label === "ZAM") as any;
+
+  test("is drawn at all — it is the sheet's only asymmetric feature", () => {
+    // Without it the drawing is symmetric both ways, and an operator standing
+    // on the ice has nothing to tell them which end of the picture they're at.
+    expect(zam).toBeDefined();
+    expect(zam.kind).toBe("rect");
+  });
+
+  test("sits on the bottom boards, past the corner arc", () => {
+    expect(zam.y + zam.h).toBeCloseTo(RINK_H, 6);
+    expect(zam.x).toBeGreaterThan(CORNER_R);
+    expect(zam.x + zam.w).toBeLessThan(RINK_W - CORNER_R);
+  });
+
+  test("its whole span is actually on the ice, not hanging off a corner", () => {
+    for (const x of [zam.x, zam.x + zam.w / 2, zam.x + zam.w]) {
+      expect(insideRink(x, RINK_H - 0.5)).toBe(true);
+    }
+  });
+
+  test("it is the ONLY labelled shape, so the label branch stays unambiguous", () => {
+    expect(rinkMarkings().filter((s: any) => s.label).length).toBe(1);
+  });
+});

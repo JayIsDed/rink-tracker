@@ -343,3 +343,56 @@ describe("feed", () => {
     expect(Array.isArray(r.body)).toBe(true);
   });
 });
+
+describe("card history", () => {
+  // "Every write is attributed + timestamped" is a law on n-72, and it was
+  // being kept in a table nothing could read. Round one showed a timeline on
+  // every issue; the rebuild wrote better records and surfaced none of them.
+  test("records each action against the card, oldest first", async () => {
+    await call("/api/identity", { method: "POST", body: JSON.stringify({ name: "Dana" }) });
+    const c = await call("/api/cards", { method: "POST", body: JSON.stringify({ title: "Timeline" }) });
+    const id = c.body.id;
+    await call(`/api/cards/${id}/claim`, { method: "POST", body: "{}" });
+    await call(`/api/cards/${id}/done`, { method: "POST", body: "{}" });
+
+    const h = await call(`/api/cards/${id}/history`);
+    expect(h.status).toBe(200);
+    expect(h.body.map((r: { action: string }) => r.action)).toEqual(["create", "claim", "done"]);
+    for (const r of h.body) expect(r.actor).toBe("Dana");
+    // Chronological, so the client can reverse it once and be sure.
+    const times = h.body.map((r: { at: number }) => r.at);
+    expect([...times].sort((a, b) => a - b)).toEqual(times);
+  });
+
+  test("one card's history never picks up another's", async () => {
+    await call("/api/identity", { method: "POST", body: JSON.stringify({ name: "Dana" }) });
+    const a = await call("/api/cards", { method: "POST", body: JSON.stringify({ title: "A" }) });
+    const b = await call("/api/cards", { method: "POST", body: JSON.stringify({ title: "B" }) });
+    await call(`/api/cards/${b.body.id}/claim`, { method: "POST", body: "{}" });
+
+    const ha = await call(`/api/cards/${a.body.id}/history`);
+    expect(ha.body.map((r: { action: string }) => r.action)).toEqual(["create"]);
+  });
+
+  test("a card spawned by a maintenance outcome says where it came from", async () => {
+    // Without an audit row on spawnCard, the one card type nobody typed by
+    // hand is also the one whose history starts blank.
+    await call("/api/identity", { method: "POST", body: JSON.stringify({ name: "Dana" }) });
+    const tickers = await call("/api/tickers");
+    const t = tickers.body[0];
+    await call("/api/maintenance", {
+      method: "POST",
+      body: JSON.stringify({ ticker_id: t.id, outcome: "something_wrong", notes: "leaking" }),
+    });
+    const cards = await call("/api/cards");
+    const spawned = cards.body.find((c: { title: string }) => c.title.includes("something else is wrong"));
+    expect(spawned).toBeDefined();
+    const h = await call(`/api/cards/${spawned.id}/history`);
+    expect(h.body[0].action).toBe("create");
+    expect(h.body[0].detail.spawned).toBe(true);
+  });
+
+  test("history for a card that doesn't exist is a 404", async () => {
+    expect((await call("/api/cards/999999/history")).status).toBe(404);
+  });
+});

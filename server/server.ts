@@ -160,6 +160,9 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (!action && method === "DELETE") return cards.handleDelete(id, actor, isAdmin);
   }
 
+  const cardHistory = /^\/api\/cards\/(\d+)\/history$/.exec(path);
+  if (cardHistory && method === "GET") return cards.handleHistory(Number(cardHistory[1]));
+
   // ── Card photos ──
   const photoPost = /^\/api\/cards\/(\d+)\/photos$/.exec(path);
   if (photoPost && method === "POST") return photos.handleUpload(req, Number(photoPost[1]), actor);

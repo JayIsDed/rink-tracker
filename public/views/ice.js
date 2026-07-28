@@ -104,7 +104,18 @@ function createSheetCanvas({ onTap, onResize } = {}) {
         cx.arc(s.cx * scale, s.cy * scale, s.r * scale, s.from, s.to);
         cx.stroke();
       } else if (s.kind === "rect") {
-        cx.strokeRect(s.x * scale, s.y * scale, s.w * scale, s.h * scale);
+        // A labelled rect is filled — the Zamboni door has to read as a solid
+        // marker at phone width, where a 1.2ft-tall outline is a hairline.
+        if (s.label) cx.fillRect(s.x * scale, s.y * scale, s.w * scale, s.h * scale);
+        else cx.strokeRect(s.x * scale, s.y * scale, s.w * scale, s.h * scale);
+        if (s.label && cssW >= 420) {
+          cx.save();
+          cx.font = "600 8px ui-sans-serif, system-ui, sans-serif";
+          cx.textAlign = "left";
+          cx.textBaseline = "bottom";
+          cx.fillText(s.label, s.x * scale, (s.y - 0.6) * scale);
+          cx.restore();
+        }
       }
     }
 

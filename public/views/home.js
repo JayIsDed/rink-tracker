@@ -322,6 +322,59 @@ function renderBoard(wrap, cards, state, reload) {
     );
     for (const c of done) wrap.append(cardRow(c, state, reload));
   }
+
+  // Done cards auto-archive after the settings window, and until now there was
+  // no way to look at one again — `?archived=1` existed on the API with
+  // nothing on screen able to ask for it. "Didn't we fix that last month?" is
+  // a question the board should be able to answer.
+  wrap.append(
+    el("button.btn.small", {
+      type: "button",
+      style: { marginTop: "var(--s4)" },
+      text: "Show archived",
+      onclick: () => openArchive(state),
+    })
+  );
+}
+
+async function openArchive(state) {
+  openSheet("Archived", [el("p.dim", { text: "Loading…" })]);
+  let rows;
+  try {
+    rows = await get("/api/cards?archived=1");
+  } catch (err) {
+    openSheet("Archived", [empty("Couldn't load the archive", err.message)]);
+    return;
+  }
+  openSheet("Archived", [
+    rows.length
+      ? el("div", {}, [
+          el("p.muted.prose", {
+            style: { marginTop: 0 },
+            text: `${rows.length} card${rows.length === 1 ? "" : "s"} that dropped off the board after being finished.`,
+          }),
+          ...rows.map((c) =>
+            el("div.row", { style: { marginTop: "var(--s3)", gap: "var(--s3)" } }, [
+              c.photos?.length
+                ? el("img", {
+                    src: c.photos[0].thumb_url,
+                    alt: "",
+                    loading: "lazy",
+                    style: { width: "36px", height: "36px", objectFit: "cover", borderRadius: "var(--r-sm)" },
+                  })
+                : null,
+              el("span.grow", {}, [
+                el("div", { text: c.title }),
+                el("div.dim", {
+                  style: { fontSize: "12px" },
+                  text: `${c.done_by ? `done by ${c.done_by} · ` : ""}archived ${ago(c.archived_at)}`,
+                }),
+              ]),
+            ])
+          ),
+        ])
+      : empty("Nothing archived yet", "Finished cards land here once they've been done a while."),
+  ]);
 }
 
 function cardRow(c, state, reload) {
@@ -534,6 +587,49 @@ function photoBlock(card, state, { pending, onChanged }) {
   return wrap;
 }
 
+// What each audited action reads as in a sentence starting with a name.
+const HISTORY_VERB = {
+  create: "raised it",
+  claim: "picked it up",
+  unclaim: "put it back",
+  done: "finished it",
+  reopen: "reopened it",
+  archive: "archived it",
+  edit: "edited it",
+  photos: "added a photo",
+  photo_delete: "removed a photo",
+};
+
+/**
+ * The card's history, filled in after the sheet is already on screen — it is
+ * the least urgent thing here and must not hold up the controls.
+ */
+function historyBlock(cardId) {
+  const wrap = el("div", { style: { marginTop: "var(--s4)" } });
+
+  get(`/api/cards/${cardId}/history`)
+    .then((rows) => {
+      if (!rows.length) return;
+      clear(wrap).append(
+        el("p.section-title", { text: "History" }),
+        ...rows.reverse().map((r) => {
+          const what = HISTORY_VERB[r.action] ?? r.action.replace(/_/g, " ");
+          const extra = r.action === "create" && r.detail?.spawned ? " (off a maintenance check)" : "";
+          return el("div.row", { style: { marginTop: "var(--s1)", fontSize: "12px" } }, [
+            el("span.grow", { text: `${r.actor ?? "someone"} ${what}${extra}` }),
+            el("span.dim.fixed", { text: ago(r.at) }),
+          ]);
+        })
+      );
+    })
+    .catch(() => {
+      // A history that won't load is not worth an error banner over a card the
+      // user can still read and act on.
+    });
+
+  return wrap;
+}
+
 /** Upload whatever is pending against a card that now exists. */
 async function flushPhotos(cardId, pending) {
   if (!pending.length) return;
@@ -661,6 +757,7 @@ function openCardSheet(card, state, reload) {
           text: `Raised by ${card.created_by} · ${stamp(card.created_at)}`,
         })
       : null,
+    card && !isNew ? historyBlock(card.id) : null,
   ]);
 }
 
