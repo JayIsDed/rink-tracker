@@ -146,6 +146,27 @@ export function rinkOutlineCommands(scale) {
 }
 
 /**
+ * The k geometrically nearest OTHER points to a given point number, nearest
+ * first. This is what "vs neighbours" means everywhere in the app — the thin
+ * spot at pt 27 is only alarming because 3.5–4.4" sits all around it, and both
+ * the entry summary and the server's thin-spot strip need the same neighbour
+ * set or they will disagree in front of the GM.
+ *
+ * @returns {Array<{point_nbr:number, dist:number}>}
+ */
+export function nearestNeighbours(nbr, k = 4) {
+  const self = POINT_XY.get(nbr);
+  if (!self) return [];
+  const out = [];
+  for (const [n, xy] of POINT_XY) {
+    if (n === nbr) continue;
+    out.push({ point_nbr: n, dist: Math.hypot(xy.x - self.x, xy.y - self.y) });
+  }
+  out.sort((a, b) => a.dist - b.dist || a.point_nbr - b.point_nbr);
+  return out.slice(0, Math.max(0, k));
+}
+
+/**
  * Nearest point to a feet-space coordinate, with its distance. Used by
  * tap-on-rink entry. Returns null only if no points were supplied.
  */
