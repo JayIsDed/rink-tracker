@@ -191,6 +191,12 @@ button, input, select, textarea {
   scrollbar-width: none;
 }
 .dock::-webkit-scrollbar { display: none; }
+/* `display: flex` above outranks the UA stylesheet's `[hidden] { display: none }`,
+   so setting el.hidden left the dock painting its background and border as a
+   hairline at the bottom of the screen — with --dock-h at 0 it was a sliver, not
+   an absence. Both callers rely on `hidden` meaning gone: the boot-failure
+   screen, and renderDock when fewer than two surfaces have shipped. */
+.dock[hidden] { display: none; }
 
 .dock a {
   flex: 1 1 0;

@@ -4,6 +4,7 @@
 import { get, post } from "/shared/api.js";
 import { el, clear, openSheet, closeSheet, toast, tick } from "/shared/ui.js";
 import * as views from "/shared/views.js";
+import * as outbox from "/shared/outbox.js";
 
 // Registering a view is what puts it in the dock. Add the import when the
 // surface ships — never before.
@@ -53,6 +54,7 @@ const titleEl = document.getElementById("view-title");
 const dockEl = document.getElementById("dock");
 
 let cleanup = null;
+let booted = false;
 
 export function navigate(path, { replace = false } = {}) {
   if (replace) history.replaceState({}, "", path);
@@ -269,19 +271,77 @@ export function openAdminUnlock() {
 
 // ── Boot ──────────────────────────────────────────────────────────────
 
-(async function boot() {
-  try {
-    await refreshBootstrap();
-  } catch (err) {
-    console.error("[shell] bootstrap failed", err);
-    clear(viewEl).append(
+/**
+ * Bootstrap failed — no identity, no machines, no settings, so no surface can
+ * honestly render. Three things this screen has to get right, all of them found
+ * by looking at the probe's error/offline renders rather than at its numbers:
+ *
+ * 1. It used to say "pull down to retry". There is no pull-to-refresh in this
+ *    app and never was, so it told the crew to perform a gesture that does
+ *    nothing — in a cold building, on a screen that already looks broken.
+ * 2. The dock stayed visible as an empty floating bar, because `render()` never
+ *    ran and so `renderDock` never hid it.
+ * 3. Offline reached this same dead end saying nothing about the outbox. That is
+ *    the exact moment a crew member most needs to know their readings are safe,
+ *    and it was the one moment the app didn't say so.
+ */
+function bootFailed(err) {
+  booted = false;
+  console.error("[shell] bootstrap failed", err);
+  dockEl.hidden = true;
+  document.documentElement.style.setProperty("--dock-h", "0px");
+
+  const queued = outbox.status().pending;
+  // `navigator.onLine` alone is not the signal. It stays TRUE for a request that
+  // never reached a server — captive portals do this, so does the rink's patchy
+  // wifi, and so does Playwright's `internetdisconnected` abort, which is how
+  // this branch was caught being dead code in the first place. An ApiError
+  // always carries a status; a fetch that failed at the network layer carries
+  // none. No status means nobody answered.
+  const offline =
+    navigator.onLine === false || err?.status == null || err?.body?.error === "offline";
+
+  const retry = el("button.btn.primary.grow", {
+    type: "button",
+    text: "Try again",
+    onclick: async () => {
+      retry.disabled = true;
+      retry.textContent = "Trying…";
+      try {
+        await boot();
+      } catch {
+        retry.disabled = false;
+        retry.textContent = "Try again";
+      }
+    },
+  });
+
+  clear(viewEl).append(
+    el("div.card", {}, [
       el("div.empty", {}, [
-        el("strong", { text: "Can't reach the server" }),
-        el("span", { text: "Check the connection and pull down to retry." }),
-      ])
-    );
-    return;
-  }
+        el("strong", { text: offline ? "You're offline" : "Can't reach the server" }),
+        el("span", {
+          text: offline
+            ? "The app needs a connection to load. Nothing you've already logged is lost."
+            : "The rink's server isn't answering right now.",
+        }),
+      ]),
+      queued > 0
+        ? el("p.muted.prose", {
+            style: { color: "var(--green)" },
+            text: `${queued} reading${queued === 1 ? "" : "s"} saved on this phone. ${queued === 1 ? "It" : "They"} will send ${queued === 1 ? "itself" : "themselves"} as soon as the connection is back — you don't have to do anything.`,
+          })
+        : null,
+      el("div.row", { style: { marginTop: "var(--s3)" } }, [retry]),
+    ])
+  );
+}
+
+async function boot() {
+  await refreshBootstrap();
+  booted = true;
+  dockEl.hidden = false;
+  document.documentElement.style.removeProperty("--dock-h");
   renderWho();
   await render();
 
@@ -291,4 +351,16 @@ export function openAdminUnlock() {
     const here = location.pathname + location.search;
     openIdentity({ returnTo: here !== "/" ? here : null });
   }
-})();
+}
+
+boot().catch(bootFailed);
+
+// Coming back from a dead spot should heal the app on its own — someone walking
+// out of the cold end of the building shouldn't have to know to tap anything.
+// Gated on an explicit flag, not on what the DOM looks like: plenty of healthy
+// views render an `.empty` block ("Nothing on the board"), and re-booting under
+// those would throw away the screen the user is reading.
+addEventListener("online", () => {
+  if (booted) return;
+  boot().catch(bootFailed);
+});
