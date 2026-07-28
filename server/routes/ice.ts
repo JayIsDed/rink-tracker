@@ -37,6 +37,28 @@ const DROPPING_PER_WEEK = -0.15;
 /** Sessions of history required before a trend is claimed at all. */
 const MIN_TREND_SESSIONS = 4;
 
+// How far OUTSIDE the local min-max a point must sit to be called out of line
+// with its neighbours.
+//
+// The first cut compared against the neighbour MEAN, and on the real carry it
+// flagged 14 of 35 points — including five that were merely thicker than
+// average. The reason is that a mean is a bad summary here: point 27's four
+// neighbours span 1.97"-4.37", so "1.25 off the mean" mostly measures the
+// gradient across the sheet, not an outlier. Being outside the range its own
+// neighbours occupy is the claim actually worth making, and on the same data it
+// leaves the nine genuinely thin points and drops the noise.
+const OUT_OF_LINE_IN = 0.75;
+
+// A z-score needs a companion guard, because on this data it is computed from
+// about four weekly sessions and a tiny standard deviation makes any movement
+// look enormous — the first run produced z of -5.5 and +7.79 on points that had
+// barely moved, and lit up eight of thirty-five. Statistical significance is not
+// operational significance: a point is only "unusual" if it has ALSO moved half
+// an inch off its own recent normal. Below that it is measurement noise wearing
+// a big number.
+const MIN_UNUSUAL_MOVE_IN = 0.5;
+const MIN_BASELINE_SESSIONS = 4;
+
 type Row = Record<string, unknown>;
 
 const qSessions = db.query(`
@@ -91,15 +113,32 @@ function rinkParam(url: URL): string {
   return r === "L" ? "L" : MEASURED_RINK;
 }
 
-/** YYYY-MM-DD, n days before today in the rink's local zone. */
-function daysAgoISO(days: number): string {
-  const d = new Date(Date.now() - days * 86400000);
+function toISO(ms: number): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(d);
+  }).format(new Date(ms));
+}
+
+/** YYYY-MM-DD, n days before today in the rink's local zone. */
+function daysAgoISO(days: number): string {
+  return toISO(Date.now() - days * 86400000);
+}
+
+/**
+ * YYYY-MM-DD, n days before a given date.
+ *
+ * The windows must be anchored to the SESSION being examined, not to today. The
+ * first cut used "today minus 30", which meant every point in the most recent
+ * carried session came back with z = 0 — its baseline window held two rows, one
+ * short of the minimum, purely because that session was a fortnight old. Open a
+ * session from last winter and the window would be empty and the whole anomaly
+ * column would read zero without ever saying it had nothing to work with.
+ */
+function daysBeforeISO(date: string, days: number): string {
+  return toISO(Date.parse(`${date}T12:00:00Z`) - days * 86400000);
 }
 
 export function handleSessions(url: URL): Response {
@@ -194,11 +233,15 @@ export function handleThinSpots(url: URL): Response {
   // One history pull over the wider of the two windows, sliced per question.
   const trendDays = getSettingNum("trend_window_days");
   const anomalyDays = getSettingNum("anomaly_window_days");
-  const from = daysAgoISO(Math.max(trendDays, anomalyDays));
-  const anomalyFrom = daysAgoISO(anomalyDays);
+  const from = daysBeforeISO(date, Math.max(trendDays, anomalyDays));
+  const anomalyFrom = daysBeforeISO(date, anomalyDays);
 
   const history = new Map<number, { date: string; value: number }[]>();
-  for (const h of qHistory.all({ $rink: rink, $from: from }) as Row[]) {
+  // Only history up to and including the session under examination — a trend
+  // shown against an old session must not be computed from its future.
+  for (const h of (qHistory.all({ $rink: rink, $from: from }) as Row[]).filter(
+    (h) => String(h.measure_date) <= date
+  )) {
     const n = Number(h.point_nbr);
     if (!history.has(n)) history.set(n, []);
     history.get(n)!.push({ date: String(h.measure_date), value: Number(h.depth_in) });
@@ -212,31 +255,40 @@ export function handleThinSpots(url: URL): Response {
     const near = nearestNeighbours(n, 4).map((nb: { point_nbr: number }) => readings.get(nb.point_nbr) ?? null);
     const nearVals = near.filter((v): v is number => v != null);
     const nMean = nearVals.length ? mean(nearVals) : null;
+    const nMin = nearVals.length ? Math.min(...nearVals) : null;
+    const nMax = nearVals.length ? Math.max(...nearVals) : null;
     const off = nMean == null ? null : depth - nMean;
+    // Distance outside the range the neighbours actually occupy — negative when
+    // the point sits within it.
+    const outside = nMin == null ? null : Math.max(nMin - depth, depth - nMax!);
 
     // Baseline EXCLUDES today: the question is whether this reading is unusual
     // for this point, and folding today into its own baseline drags the mean
     // toward the value being tested.
     const series = history.get(n) ?? [];
     const baseline = series.filter((p) => p.date >= anomalyFrom && p.date !== date).map((p) => p.value);
-    const z = baseline.length >= 3 ? zScore(depth, mean(baseline), stdev(baseline)) : 0;
+    const baseMean = baseline.length ? mean(baseline) : null;
+    const z = baseline.length >= MIN_BASELINE_SESSIONS ? zScore(depth, baseMean, stdev(baseline)) : 0;
+    const moved = baseMean == null ? null : Math.round((depth - baseMean) * 100) / 100;
     // Two sessions make a perfect line and a meaningless slope. Four is the
     // point at which a claimed trend is worth putting in front of the GM.
     const trend = series.length >= MIN_TREND_SESSIONS ? trendPerWeek(series) : null;
 
     const thin = depth <= threshold;
-    const odd = off != null && Math.abs(off) >= 1.25;
+    const odd = outside != null && outside >= OUT_OF_LINE_IN;
     const dropping = trend != null && trend <= DROPPING_PER_WEEK;
-    const unusual = Math.abs(z) >= 2;
+    const unusual = Math.abs(z) >= 2 && moved != null && Math.abs(moved) >= MIN_UNUSUAL_MOVE_IN;
     if (!thin && !odd && !unusual && !dropping) continue;
 
     spots.push({
       point_nbr: n,
       depth_in: depth,
       neighbour_mean: nMean == null ? null : Math.round(nMean * 100) / 100,
-      neighbour_min: nearVals.length ? Math.min(...nearVals) : null,
-      neighbour_max: nearVals.length ? Math.max(...nearVals) : null,
+      neighbour_min: nMin,
+      neighbour_max: nMax,
       off_by: off == null ? null : Math.round(off * 100) / 100,
+      outside_by: outside == null ? null : Math.round(outside * 100) / 100,
+      moved_by: moved,
       trend_per_week: trend == null ? null : Math.round(trend * 1000) / 1000,
       z: Math.round(z * 100) / 100,
       history_n: series.length,

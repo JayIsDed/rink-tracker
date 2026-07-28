@@ -76,6 +76,21 @@ describe("thin, in absolute and neighbour terms", () => {
     expect(spot.neighbour_mean).toBeCloseTo(3.8, 1);
     expect(spot.neighbour_min).toBeCloseTo(3.8, 1);
     expect(spot.off_by).toBeLessThan(-1.25);
+    // "Out of line" is measured against the range the neighbours actually
+    // occupy, not their mean — on the real carry a mean-based test flagged
+    // 14 of 35 points because it was reading the gradient across the sheet.
+    expect(spot.outside_by).toBeGreaterThan(0.75);
+  });
+
+  test("a point merely thicker than average is not called out of line", async () => {
+    // The five false alarms the mean-based test produced were all of this
+    // shape: above the neighbourhood average, inside its spread.
+    const r = await call("/api/ice/thin-spots?rink=U");
+    const nbrs = nearestNeighbours(THIN_PT, 4).map((n: any) => n.point_nbr);
+    for (const n of nbrs) {
+      const s = r.body.spots.find((x: any) => x.point_nbr === n);
+      expect(s?.odd ?? false).toBe(false);
+    }
   });
 
   test("spots come back thinnest first", async () => {
@@ -129,12 +144,39 @@ describe("restraint", () => {
   });
 
   test("a trend is not claimed from too little history", async () => {
-    const fresh = DAY(2);
-    await write(fresh, [{ point_nbr: 14, depth_in: 3.5 }]);
-    const r = await call(`/api/ice/thin-spots?rink=U&date=${fresh}`);
-    const s = r.body.spots.find((x: any) => x.point_nbr === 14);
-    // Two points make a perfect line and a meaningless slope.
-    expect(s?.trend_per_week ?? null).toBeNull();
+    // The very first session has nothing behind it. Two points make a perfect
+    // line and a meaningless slope, so nothing is claimed until there are four.
+    const r = await call(`/api/ice/thin-spots?rink=U&date=${DAY(SESSIONS[0])}`);
+    for (const s of r.body.spots) expect(s.trend_per_week).toBeNull();
+  });
+
+  test("a big z-score on a reading that barely moved is not an alarm", async () => {
+    // On the real carry this fired eight times: about four weekly baseline
+    // samples give a tiny standard deviation, so z reached -5.5 and +7.79 on
+    // points that had moved a few hundredths of an inch. Statistical
+    // significance is not operational significance.
+    const r = await call("/api/ice/thin-spots?rink=U");
+    for (const s of r.body.spots) {
+      if (s.unusual) expect(Math.abs(s.moved_by)).toBeGreaterThanOrEqual(0.5);
+    }
+    expect(r.body.spots.some((s: any) => s.unusual && Math.abs(s.moved_by) < 0.5)).toBe(false);
+  });
+
+  test("windows are anchored to the session, not to today", async () => {
+    // Anchoring to "today minus 30" meant an older session's baseline window
+    // was empty and every z silently read 0 — the column would look computed
+    // and be blank. An old session must still get its real history.
+    const old = await call(`/api/ice/thin-spots?rink=U&date=${DAY(SESSIONS[4])}`);
+    const spot = old.body.spots.find((s: any) => s.point_nbr === THIN_PT);
+    expect(spot).toBeDefined();
+    expect(spot.history_n).toBeGreaterThan(1);
+  });
+
+  test("a session's numbers never come from its own future", async () => {
+    const old = await call(`/api/ice/thin-spots?rink=U&date=${DAY(SESSIONS[3])}`);
+    const s = old.body.spots.find((x: any) => x.point_nbr === THIN_PT);
+    // Four sessions in (index 3), so history up to and including it is 4.
+    expect(s.history_n).toBe(4);
   });
 
   test("counts and thresholds are reported so the numbers can be checked", async () => {
