@@ -21,7 +21,14 @@ register({
   icon: "◎",
   alsoOwns: ["/log/edger"],
 
-  async mount({ root, url, state, navigate }) {
+  // `setRink` here is the SHELL's, so the choice persists across visits the way
+  // round one's global switcher did. The control lives on this surface rather
+  // than in the header — rink is meaningful on two screens out of six, and a
+  // header control that greys out most of the app is worse than a local one —
+  // but "which rink was I on" is still worth remembering between sessions.
+  async mount({ root, url, state, navigate, rememberRink }) {
+    // A deep link wins over the remembered choice: an NFC tag on the Lower
+    // rink's edger means the Lower rink, whatever this phone last looked at.
     let rink = url.searchParams.get("rink") === "L" ? "L" : state.rink === "L" ? "L" : "U";
     let mode = "dots";
     const dots = new Set();
@@ -58,6 +65,7 @@ register({
 
     function setRink(r) {
       rink = r;
+      rememberRink(r);
       markActive();
       draw();
       loadHistory();

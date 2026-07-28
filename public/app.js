@@ -104,13 +104,18 @@ async function render() {
         state,
         navigate,
         refresh: refreshBootstrap,
-        // Views that are rink-specific need to be able to move the switcher, not
-        // just read it — the Ice surface offers "show the Upper rink" because it
-        // has nothing to draw for Lower.
+        // Two ways to move the rink, and the difference matters.
+        //
+        // `setRink` re-mounts the view, which is what a "show me the other
+        // rink" button means. `rememberRink` only records the choice — a view
+        // that already redrew itself calls this one, because re-mounting it
+        // would throw away whatever the operator has half-finished on screen
+        // (the edger's marks, mid-run).
         setRink: (code) => {
           setRink(code);
           render();
         },
+        rememberRink: setRink,
       })) ?? null;
   } catch (err) {
     console.error("[shell] view failed", v.id, err);

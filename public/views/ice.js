@@ -364,6 +364,13 @@ async function openPointSheet(n, date) {
 
 // Lower is a sand base — it has never held a measurement and has no surveyed
 // points. Saying so plainly beats rendering an empty sheet that looks broken.
+//
+// This screen was unreachable until the composition check. `state.rink` had
+// exactly one writer in the whole app — the button below, which sets it to
+// "U" — so nothing could ever put the shell into the state this handles, and
+// the Edger's rink pills only moved a local variable. The pills now persist
+// through the shell, which is what round one's global switcher did, and this
+// is the screen you land on if you were last on Lower and open Ice.
 function notMeasured(navigate, setRink) {
   return el("div.card", {}, [
     empty(
