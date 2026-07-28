@@ -21,5 +21,11 @@ data/rink-screenshot*.png
 # PWA simulation outputs (videos + per-device screenshots, regenerated)
 data/sim/
 
+# pwa-debug harness output. Same reason as data/sim above — this is the shared
+# harness's equivalent, missed when it replaced the in-repo fork. .probe/latest is
+# overwritten by every run and the tree reached 221 MB of screenshots. Baselines
+# live here too; if one is ever worth keeping, un-ignore that path specifically.
+.probe/
+
 # Local secrets (admin PINs etc.) — see .env.example
 .env
