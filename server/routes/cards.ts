@@ -7,6 +7,7 @@
 // one of everything.
 
 import { db, json, bad, audit, getSettingNum, replayed, remember } from "../db";
+import { listFor, thumbsForCards } from "./photos";
 
 export type Card = {
   id: number;
@@ -87,12 +88,16 @@ function parseDue(body: Record<string, unknown>): { kind: string; at: number | n
 export function handleList(url: URL): Response {
   autoArchive();
   const archived = url.searchParams.get("archived") === "1";
-  return json(archived ? qArchived.all() : qOpen.all());
+  const rows = archived ? qArchived.all() : qOpen.all();
+  // One query for every card's photos rather than one per card — the board
+  // renders thumbnails inline and the list is unbounded in principle.
+  const byCard = thumbsForCards(rows.map((r) => r.id));
+  return json(rows.map((r) => ({ ...r, photos: byCard.get(r.id) ?? [] })));
 }
 
 export function handleGet(id: number): Response {
   const c = qCard.get(id);
-  return c ? json(c) : bad("no such card", 404);
+  return c ? json({ ...c, photos: listFor(id) }) : bad("no such card", 404);
 }
 
 export async function handleCreate(req: Request, actor: string | null, isAdmin: boolean): Promise<Response> {

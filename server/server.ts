@@ -18,6 +18,7 @@ import * as propane from "./routes/propane";
 import * as feed from "./routes/feed";
 import * as edger from "./routes/edger";
 import * as ice from "./routes/ice";
+import * as photos from "./routes/photos";
 import { startScheduler, runMorningJobs } from "./jobs/scheduler";
 
 const PORT = Number(process.env.PORT ?? 3739);
@@ -157,6 +158,20 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (!action && method === "GET") return cards.handleGet(id);
     if (!action && method === "PATCH") return cards.handlePatch(req, id, actor, isAdmin);
     if (!action && method === "DELETE") return cards.handleDelete(id, actor, isAdmin);
+  }
+
+  // ── Card photos ──
+  const photoPost = /^\/api\/cards\/(\d+)\/photos$/.exec(path);
+  if (photoPost && method === "POST") return photos.handleUpload(req, Number(photoPost[1]), actor);
+  const photoDel = /^\/api\/cards\/(\d+)\/photos\/(\d+)$/.exec(path);
+  if (photoDel && method === "DELETE") {
+    return photos.handleDelete(Number(photoDel[1]), Number(photoDel[2]), actor, (await admin(req)) != null);
+  }
+  if (path.startsWith("/api/photos/thumbs/") && method === "GET") {
+    return photos.handleServe(path.slice("/api/photos/thumbs/".length), "thumb");
+  }
+  if (path.startsWith("/api/photos/") && method === "GET") {
+    return photos.handleServe(path.slice("/api/photos/".length), "full");
   }
 
   // ── Edger ──

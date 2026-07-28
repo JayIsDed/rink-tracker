@@ -41,6 +41,33 @@ export async function api(path, { method = "GET", body, idempotencyKey, signal }
   return parsed;
 }
 
+/**
+ * Multipart POST, for photos.
+ *
+ * Deliberately NOT routed through `api()`: that one JSON-stringifies the body
+ * and sets content-type, and a multipart request must let the browser write
+ * its own header so the boundary token matches the payload. Setting it by hand
+ * is the classic silent-400 on file uploads.
+ *
+ * No idempotency key either. Replaying a photo upload from a cached response
+ * would hand back ids for files this request never stored; uploads are cheap
+ * to retry by hand and duplicates are visible and deletable.
+ */
+export async function upload(path, formData) {
+  const res = await fetch(path, { method: "POST", body: formData, credentials: "same-origin" });
+  const text = await res.text();
+  let parsed = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+  if (!res.ok) throw new ApiError(parsed?.error ?? `upload failed (${res.status})`, res.status, parsed);
+  return parsed;
+}
+
 export const get = (p, opts) => api(p, { ...opts, method: "GET" });
 export const post = (p, body, opts) => api(p, { ...opts, method: "POST", body });
 export const put = (p, body, opts) => api(p, { ...opts, method: "PUT", body });

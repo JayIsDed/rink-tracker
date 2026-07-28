@@ -8,7 +8,7 @@
 // reads this on a desktop. Legible cold, credible half-empty, no stubs.
 
 import { register } from "/shared/views.js";
-import { get, post } from "/shared/api.js";
+import { get, post, patch, del, upload } from "/shared/api.js";
 import { el, clear, empty, openSheet, closeSheet, toast, tick } from "/shared/ui.js";
 import { ago, stamp, dueLabel, clock12 } from "/shared/lib/dates.js";
 import { nextIceCut, iceCutsOn, cutContext, until } from "/shared/lib/schedule.js";
@@ -346,7 +346,33 @@ function cardRow(c, state, reload) {
       },
     },
     [
-      el("div.row", {}, [
+      el("div.row", { style: { gap: "var(--s3)" } }, [
+        // A photo on the row is the whole reason the crew would rather log a
+        // card than say it out loud — "that crack" is one glance, not a
+        // paragraph. 44px keeps the row height honest on a phone.
+        c.photos?.length
+          ? el("span.fixed", { style: { position: "relative" } }, [
+              el("img", {
+                src: c.photos[0].thumb_url,
+                alt: "",
+                loading: "lazy",
+                style: {
+                  width: "44px",
+                  height: "44px",
+                  objectFit: "cover",
+                  borderRadius: "var(--r-sm)",
+                  border: "1px solid var(--border)",
+                  display: "block",
+                },
+              }),
+              c.photos.length > 1
+                ? el("span.dim", {
+                    style: { position: "absolute", right: "2px", bottom: "0", fontSize: "10px", fontWeight: "700" },
+                    text: `+${c.photos.length - 1}`,
+                  })
+                : null,
+            ])
+          : null,
         el("span.grow", {}, [
           el("div", {
             style: {
@@ -394,8 +420,132 @@ async function act(card, action, reload) {
   }
 }
 
+/**
+ * Photos on a card. Existing ones are links to the full image; pending ones are
+ * local File objects held until the card exists, because a photo needs a
+ * card_id and a brand-new card doesn't have one yet.
+ */
+function photoBlock(card, state, { pending, onChanged }) {
+  const wrap = el("div.field");
+
+  const fileInput = el("input", {
+    type: "file",
+    accept: "image/*",
+    // `capture` opens the camera directly on a phone, which is the whole point
+    // — the crew is standing in front of the thing they are logging.
+    capture: "environment",
+    multiple: true,
+    style: { display: "none" },
+  });
+
+  const strip = el("div.row", { style: { flexWrap: "wrap", gap: "var(--s2)", marginTop: "var(--s2)" } });
+  const status = el("div.dim", { style: { fontSize: "12px", minHeight: "16px" } });
+
+  function thumb(src, { onRemove, href } = {}) {
+    const img = el("img", {
+      src,
+      alt: "",
+      loading: "lazy",
+      style: {
+        width: "72px",
+        height: "72px",
+        objectFit: "cover",
+        borderRadius: "var(--r-sm)",
+        border: "1px solid var(--border)",
+        display: "block",
+      },
+    });
+    return el("span.fixed", { style: { position: "relative" } }, [
+      href ? el("a", { href, target: "_blank", rel: "noopener" }, [img]) : img,
+      onRemove
+        ? el("button.btn.small", {
+            type: "button",
+            "aria-label": "Remove photo",
+            text: "×",
+            onclick: onRemove,
+            style: { position: "absolute", top: "-6px", right: "-6px", minWidth: "28px", padding: "0 8px" },
+          })
+        : null,
+    ]);
+  }
+
+  function render() {
+    clear(strip);
+    for (const p of card?.photos ?? []) {
+      strip.append(
+        thumb(p.thumb_url, {
+          href: p.url,
+          // Deleting a photo is destructive and unrecoverable, so it stays an
+          // admin lever — same tier as deleting the card itself.
+          onRemove: state.isAdmin
+            ? async () => {
+                if (!confirm("Delete this photo? That can't be undone.")) return;
+                try {
+                  await del(`/api/cards/${card.id}/photos/${p.id}`);
+                  card.photos = card.photos.filter((x) => x.id !== p.id);
+                  render();
+                  onChanged?.();
+                } catch (err) {
+                  status.textContent = err.message;
+                  status.style.color = "var(--red)";
+                }
+              }
+            : null,
+        })
+      );
+    }
+    for (const [i, file] of pending.entries()) {
+      strip.append(
+        thumb(URL.createObjectURL(file), {
+          onRemove: () => {
+            pending.splice(i, 1);
+            render();
+          },
+        })
+      );
+    }
+    const n = (card?.photos?.length ?? 0) + pending.length;
+    status.textContent = pending.length ? `${pending.length} to upload when you save` : "";
+    status.style.color = "";
+    wrap.querySelector("label").textContent = n ? `Photos (${n})` : "Photos";
+  }
+
+  fileInput.addEventListener("change", () => {
+    pending.push(...[...fileInput.files]);
+    // Reset so picking the same file twice in a row still fires `change`.
+    fileInput.value = "";
+    render();
+  });
+
+  wrap.append(
+    el("label", { text: "Photos" }),
+    el("div.row", {}, [
+      el("button.btn.grow", {
+        type: "button",
+        text: "Add a photo",
+        onclick: () => fileInput.click(),
+      }),
+    ]),
+    fileInput,
+    strip,
+    status
+  );
+  render();
+  return wrap;
+}
+
+/** Upload whatever is pending against a card that now exists. */
+async function flushPhotos(cardId, pending) {
+  if (!pending.length) return;
+  const fd = new FormData();
+  for (const f of pending) fd.append("photos", f, f.name || "photo.jpg");
+  await upload(`/api/cards/${cardId}/photos`, fd);
+  pending.length = 0;
+}
+
 function openCardSheet(card, state, reload) {
   const isNew = !card;
+  const pending = [];
   const title = el("input.input", { type: "text", maxlength: "160", value: card?.title ?? "", placeholder: "What needs doing?" });
   const body = el("textarea.input", { placeholder: "Any detail (optional)", value: card?.body ?? "" });
   const status = el("div.dim", { text: "" });
@@ -460,8 +610,24 @@ function openCardSheet(card, state, reload) {
       return;
     }
     try {
-      if (isNew) await post("/api/cards", { ...payload(), claim });
-      else await (await import("/shared/api.js")).patch(`/api/cards/${card.id}`, payload());
+      // The card has to exist before a photo can reference it, so a new card is
+      // written first and the pending files follow.
+      const saved = isNew ? await post("/api/cards", { ...payload(), claim }) : await patch(`/api/cards/${card.id}`, payload());
+      if (pending.length) {
+        status.textContent = `Uploading ${pending.length} photo${pending.length === 1 ? "" : "s"}…`;
+        status.style.color = "";
+        try {
+          await flushPhotos(saved.id, pending);
+        } catch (err) {
+          // The card is already saved. Say exactly that, and leave the sheet
+          // open holding the files — closing here would look like success and
+          // lose the picture.
+          status.textContent = `Card saved, but the photos didn't upload: ${err.message}`;
+          status.style.color = "var(--red)";
+          reload();
+          return;
+        }
+      }
       closeSheet();
       toast(isNew ? "On the board" : "Saved", "green");
       reload();
@@ -481,6 +647,7 @@ function openCardSheet(card, state, reload) {
     el("div.field", {}, [el("label", { text: "Due" }), dueKind]),
     dueAtField,
     dueTextField,
+    photoBlock(card, state, { pending, onChanged: reload }),
     status,
     el("div.row", { style: { gap: "var(--s2)" } }, [
       el("button.btn.primary.grow", { type: "button", text: isNew ? "Add to board" : "Save", onclick: () => save(false) }),
