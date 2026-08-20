@@ -19,6 +19,7 @@ import * as feed from "./routes/feed";
 import * as edger from "./routes/edger";
 import * as ice from "./routes/ice";
 import * as photos from "./routes/photos";
+import * as schedule from "./routes/schedule";
 import { startScheduler, runMorningJobs } from "./jobs/scheduler";
 
 const PORT = Number(process.env.PORT ?? 3739);
@@ -215,6 +216,8 @@ async function api(req: Request, url: URL): Promise<Response> {
         .all({ $from: from, $to: to, $rink: rink === "U" || rink === "L" ? rink : null })
     );
   }
+  if (path === "/api/schedule/cuts" && method === "GET") return schedule.handleCuts(url);
+  if (path === "/api/schedule/day" && method === "GET") return schedule.handleDay(url);
 
   // ── Job health ──
   if (path === "/api/jobs/health" && method === "GET") {
