@@ -88,7 +88,8 @@ function randomToken(): string {
 
 export function isSecure(req: Request): boolean {
   const proto = req.headers.get("x-forwarded-proto");
-  if (proto) return proto.toLowerCase() === "https";
+  // First hop only: Bun 1.4 joins a header sent twice into "https, https".
+  if (proto) return proto.split(",")[0].trim().toLowerCase() === "https";
   try { return new URL(req.url).protocol === "https:"; } catch { return false; }
 }
 

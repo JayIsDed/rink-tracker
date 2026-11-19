@@ -1,5 +1,7 @@
 # Rink Tracker — Bun + SQLite, no build step
-FROM oven/bun:1.3-alpine
+# Pinned to the patch the checks ran on (1.3-alpine floated). bun.lock stays lockfileVersion 1 on
+# purpose: 1.4 reads it with --frozen-lockfile, while a v2 lock can't be read by 1.3 (no easy rollback).
+FROM oven/bun:1.4.2-alpine
 
 WORKDIR /app
 

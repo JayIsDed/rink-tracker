@@ -143,7 +143,7 @@ ice-tracker still runs at `https://ice-tracker.pancake3d.com` and on dev port 37
 ```
 - Compose at stack root references `build: ./src` and `volumes: - ./data:/app/data`
 - Data dir was seeded with the live ice-tracker DB clone (2,216 measurements)
-- Sharp 0.34.5 builds cleanly in `oven/bun:1.3-alpine` with `bun install --frozen-lockfile --production`
+- Sharp 0.34.5 installs in `oven/bun:1.4.2-alpine` (was `1.3-alpine`) with `bun install --frozen-lockfile --production`. The build only downloads the musl binary; it first loads on the first photo upload
 
 ### Redeploy flow (next time)
 ```bash
